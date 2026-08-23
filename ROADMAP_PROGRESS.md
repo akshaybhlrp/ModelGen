@@ -62,7 +62,11 @@
   - [x] Computed Bayesian Beta-Bernoulli trust posterior $E[\theta] = \frac{\alpha + S}{\alpha + \beta + S + F}$
   - [x] Verified automatic quarantine blocking on adversarial peer nodes
 
+- [x] **Task 7.9: Research Track M6 Non-Linear DAG Synthesis**
+  - [x] Implemented 2-branch split-and-join DAG synthesis in `dag_composer.py`
+  - [x] Successfully generated and verified multi-input merge pipeline (`sort_list(a)` + `sort_list(b)` $\to$ `merge_sorted`)
+
 - [x] **Task 8: Production CLI & Final Test Battery**
   - [x] Build clean CLI tool `cli.py` for querying, composing, and evaluating
-  - [x] Run full automated test battery (`pytest test_battery.py` — 12/12 PASS in 1.06s)
+  - [x] Run full automated test battery (`pytest test_battery.py` — 12/12 PASS in 1.08s)
   - [x] Commit and push all milestones to GitHub
