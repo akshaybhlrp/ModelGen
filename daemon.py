@@ -27,8 +27,13 @@ TOPICS = [
 def run_daemon_cycle(conn, token: str):
     print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting background harvesting cycle...")
     
-    # 1. Harvesting pass
+    # 1. Harvesting pass (GitHub API + Stealth Browser Emulation)
     harvest_batch(conn, TOPICS, token=token, max_pages_per_topic=2)
+    
+    # 1b. Stealth Browser Web Crawl (Browser Fingerprints + Human Jitter)
+    from stealth_harvester import StealthWebHarvester
+    stealth = StealthWebHarvester(conn)
+    stealth.harvest_public_sources(max_items_per_topic=2)
     
     # 2. Decontamination audit
     run_decontamination_audit(conn)
