@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Databases & local state
+*.db
+*.db-journal
+*.redb
+*.vsix
+.DS_Store
