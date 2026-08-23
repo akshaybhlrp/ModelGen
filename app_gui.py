@@ -11,13 +11,13 @@ from kernel import init_db, retrieve, verify
 from compose import compose
 from dag_composer import synthesize_dag_pipeline
 
-from conversational_bridge import ConversationalBridge
+from conversational_learner import ConversationalEngine
 
 PORT = 8080
 WEB_DIR = Path(__file__).parent / "web"
 
 conn = init_db()
-bridge = ConversationalBridge(conn)
+conv_engine = ConversationalEngine(conn)
 
 class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -101,7 +101,7 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
                 latency = (time.time() - t0) * 1000
                 response_data = {"composition": res, "latency_ms": round(latency, 2)}
             else:
-                conv_res = bridge.process_message(prompt)
+                conv_res = conv_engine.process(prompt)
                 latency = (time.time() - t0) * 1000
                 if conv_res["type"] == "chat":
                     response_data = {
