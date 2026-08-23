@@ -249,13 +249,20 @@ class ConversationalEngine:
                 }
 
         # Intent: CODE_SYNTHESIS
+        q_tokens = set(tokenize(clean.lower()))
+        stop_words = {"how", "is", "are", "was", "were", "a", "an", "the", "in", "for", "to", "what", "can", "do", "you", "me", "it", "this", "that", "tell", "say"}
+        meaningful_q_tokens = q_tokens - stop_words
+
+        has_direct_code_match = False
         cands = retrieve(self.conn, clean, k=3)
         for mid, score in cands:
             row = self.conn.execute("SELECT name, source_code, test_code FROM modules WHERE id = ?", (mid,)).fetchone()
             if row:
                 name, src, tests = row
-                # If good semantic match
-                if score >= 10:
+                name_tokens = set(name.lower().replace("_", " ").split())
+                # Only return direct code if there is explicit token overlap on meaningful algorithm name tokens
+                if meaningful_q_tokens and (meaningful_q_tokens & name_tokens):
+                    has_direct_code_match = True
                     return {
                         "type": "synthesis",
                         "is_conversational": True,
@@ -298,18 +305,12 @@ class ConversationalEngine:
         except Exception:
             pass
 
-        # Fallback to nearest verified candidate if available
-        if cands:
-            mid, _ = cands[0]
-            row = self.conn.execute("SELECT name, source_code, test_code FROM modules WHERE id = ?", (mid,)).fetchone()
-            if row:
-                return {
-                    "type": "synthesis",
-                    "is_conversational": True,
-                    "message": f"Here is the closest verified implementation in my on-device memory for **{row[0]}**:",
-                    "code": row[1],
-                    "tests": row[2]
-                }
+        return {
+            "type": "chat",
+            "is_conversational": True,
+            "message": "I'm doing well, thank you! How can I assist you with code synthesis, math, or algorithms today?",
+            "code": None
+        }
 
         return {
             "type": "chat",
