@@ -238,4 +238,20 @@ def test_conversational_online_adaptation(test_conn):
     intent = engine.predict_intent("namaste modelgen")
     assert intent == "GREETING"
 
+def test_local_directory_learning(tmp_path, test_conn):
+    from local_learner import ingest_local_directory
+    sample_py = tmp_path / "custom_algo.py"
+    sample_py.write_text("""
+def compute_cube(x: int) -> int:
+    return x ** 3
+
+def test_compute_cube():
+    assert compute_cube(2) == 8
+    assert compute_cube(3) == 27
+""")
+    res = ingest_local_directory(str(tmp_path), conn=test_conn, retrain_neural_weights=False)
+    assert res["status"] == "success"
+    assert res["learned_count"] >= 1
+    assert "compute_cube" in res["modules"]
+
 

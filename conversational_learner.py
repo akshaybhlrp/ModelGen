@@ -156,6 +156,24 @@ class ConversationalEngine:
 
     def process(self, text: str) -> dict:
         clean = text.strip()
+        
+        # 0. Check if user provided a local directory path (e.g. /path/to/project or ./src)
+        clean_path = clean.strip("\"' \t\n")
+        if (clean_path.startswith("/") or clean_path.startswith("./") or clean_path.startswith("~")) and Path(os.path.expanduser(clean_path)).is_dir():
+            from local_learner import ingest_local_directory
+            res = ingest_local_directory(clean_path, conn=self.conn)
+            if res["status"] == "success":
+                mod_names = ", ".join(f"`{m}`" for m in res["modules"][:5])
+                msg = f"Successfully scanned **{res['scanned_files']} Python files** from `{clean_path}`.\n\n• **Learned & Verified**: {res['learned_count']} new algorithms ({mod_names}{'...' if len(res['modules'])>5 else ''}).\n• **Neural Weights Updated**: InfoNCE embeddings retrained on-the-fly with new local code tokens."
+            else:
+                msg = f"Failed to ingest directory `{clean_path}`: {res['message']}"
+            return {
+                "type": "chat",
+                "is_conversational": True,
+                "message": msg,
+                "code": None
+            }
+
         intent = self.predict_intent(clean)
 
         if intent == "GREETING":
