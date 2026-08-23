@@ -469,7 +469,9 @@
                 });
                 const data = await res.json();
                 
-                if (data.results && data.results.length > 0) {
+                if (data.is_conversational) {
+                    botMsg.innerHTML = `<strong>ModelGen Assistant:</strong><br>${data.message}`;
+                } else if (data.results && data.results.length > 0) {
                     let html = `<div style="margin-bottom: 8px;"><strong>Found ${data.results.length} Verified Modules (p99 latency: ${data.latency_ms}ms)</strong></div>`;
                     data.results.forEach((r, idx) => {
                         html += `

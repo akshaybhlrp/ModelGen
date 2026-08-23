@@ -45,8 +45,22 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/api/query":
             length = int(self.headers.get('Content-Length', 0))
             payload = json.loads(self.rfile.read(length).decode())
-            prompt = payload.get("prompt", "")
+            prompt = payload.get("prompt", "").strip()
             mode = payload.get("mode", "query")
+
+            # Check conversational / greeting inputs
+            greetings = {"hello", "hi", "hey", "hola", "help", "who are you", "what can you do"}
+            if prompt.lower() in greetings:
+                response_data = {
+                    "is_conversational": True,
+                    "message": "Hello! I am ModelGen — your local, verifier-gated code synthesis engine. I synthesize and verify algorithmic solutions on-device with zero cloud dependencies. Try asking for an algorithm like 'binary search', 'check anagram', or switch modes below for multi-module composition!",
+                    "latency_ms": 0.05
+                }
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(response_data).encode())
+                return
 
             t0 = time.time()
             if mode == "compose":
