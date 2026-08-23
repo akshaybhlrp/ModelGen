@@ -17,8 +17,7 @@ class ConversationalBridge:
         low = clean.lower()
 
         # 1. Greetings & Meta Queries
-        greeting_words = {"hello", "hi", "hey", "hola", "greetings", "good morning", "good evening"}
-        if any(re.search(rf"\b{w}\b", low) for w in greeting_words) and not any(k in low for k in ["algorithm", "code", "function", "write", "def "]):
+        if low in {"hello", "hi", "hey", "hola", "greetings", "good morning", "good evening"}:
             return {
                 "type": "chat",
                 "message": "Hello! I am ModelGen — an on-device, verifier-gated code synthesis model. You can talk to me about algorithms, or ask me to write, verify, and compose Python solutions for you.",
