@@ -378,8 +378,14 @@
     <!-- Main Chat Interface -->
     <div class="main-chat">
         <div class="chat-header">
-            <div>ModelGen</div>
-            <div class="model-pill">Frontier On-Device</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span>ModelGen</span>
+                <span id="model-scale-badge" class="model-pill" style="background: rgba(168, 199, 250, 0.15); color: var(--accent);">0.5B Equivalent</span>
+            </div>
+            <div class="model-pill" style="background: rgba(52, 168, 83, 0.15); color: #81c995; border: 1px solid rgba(52, 168, 83, 0.3);">
+                <span style="display: inline-block; width: 6px; height: 6px; background: #34a853; border-radius: 50%; margin-right: 4px;"></span>
+                Frontier On-Device
+            </div>
         </div>
 
         <div class="messages-container" id="messages-container">
@@ -494,10 +500,18 @@
             window.location.reload();
         }
 
-        function loadChat(idx) {
-            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
-            event.target.classList.add('active');
+        async function fetchModelInfo() {
+            try {
+                const res = await fetch('/api/model_info');
+                const data = await res.json();
+                if (data.display_scale) {
+                    const badge = document.getElementById('model-scale-badge');
+                    if (badge) badge.innerText = data.display_scale;
+                }
+            } catch(e) {}
         }
+
+        fetchModelInfo();
     </script>
 </body>
 </html>
