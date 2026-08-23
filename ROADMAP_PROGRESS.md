@@ -16,7 +16,12 @@
 - [x] **Task 3: MVO-0 Validation (50-Problem Held-Out Suite)**
   - [x] Execute `eval.py` on the 50-problem suite
   - [x] Verify `recall@10 >= 30%` (Achieved: 94.00%)
-  - [x] Verify `p99_latency < 100ms` (Achieved: 1.01ms)
+  - [x] Verify `p99_latency < 100ms` (Achieved: 0.78ms)
+
+- [x] **Task 3.5: MVO-3 Learned Neural Router (<1MB)**
+  - [x] Implement subword n-gram neural contrastive router in `learned_router.py`
+  - [x] Train with InfoNCE loss over verified problem-solution pairs
+  - [x] Verify `recall@10 >= 85%` (Achieved: 90.00% @ 1.60ms P99, 917KB footprint)
 
 - [x] **Task 4: MVO-1 Composition Engine Enhancement & Automated Search**
   - [x] Build automated problem decomposer and multi-step pipeline generator in `compose.py`
