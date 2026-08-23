@@ -128,11 +128,39 @@ class ConversationalEngine:
             pred = torch.argmax(logits, dim=1).item()
         return INTENT_LABELS.get(pred, "CODE_SYNTHESIS")
 
+    def adapt_on_the_fly(self, text: str, label_id: int):
+        """Performs immediate online gradient descent to update neural weights on-the-fly."""
+        try:
+            tokens = [self.vocab.get(w, self.vocab["<unk>"]) for w in tokenize(text)]
+            if not tokens:
+                return
+            inp = torch.tensor([tokens], dtype=torch.long)
+            target = torch.tensor([label_id], dtype=torch.long)
+
+            self.model.train()
+            optimizer = optim.SGD(self.model.parameters(), lr=0.05)
+            criterion = nn.CrossEntropyLoss()
+            
+            # Single-step online SGD update
+            out = self.model(inp)
+            loss = criterion(out, target)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            self.model.eval()
+            
+            # Save updated weights checkpoint
+            torch.save({"state_dict": self.model.state_dict(), "vocab": self.vocab}, CONV_MODEL_PATH)
+        except Exception:
+            pass
+
     def process(self, text: str) -> dict:
         clean = text.strip()
         intent = self.predict_intent(clean)
 
         if intent == "GREETING":
+            # Continuous online reinforcement for greetings
+            self.adapt_on_the_fly(clean, label_id=0)
             return {
                 "type": "chat",
                 "is_conversational": True,

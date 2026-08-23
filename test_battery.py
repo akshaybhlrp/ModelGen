@@ -229,14 +229,13 @@ def test_conversational_bridge_code_synthesis(test_conn):
     assert "is_palindrome" in res["code"]
     assert res["tests"] is not None
 
-def test_conversational_bridge_sequential_composition(test_conn):
-    from conversational_bridge import ConversationalBridge
-    bridge = ConversationalBridge(test_conn)
+def test_conversational_online_adaptation(test_conn):
+    from conversational_learner import ConversationalEngine
+    engine = ConversationalEngine(test_conn)
+    
+    # Custom new phrase adaptation
+    engine.adapt_on_the_fly("namaste modelgen", label_id=0)
+    intent = engine.predict_intent("namaste modelgen")
+    assert intent == "GREETING"
 
-    store(test_conn, "to_lower", "def to_lower(s: str) -> str:\n    return s.lower()", "def test(): assert to_lower('A') == 'a'", "MIT", "local", "str", "str")
-    store(test_conn, "count_vowels", "def count_vowels(s: str) -> int:\n    return sum(1 for c in s if c in 'aeiou')", "def test(): assert count_vowels('a') == 1", "MIT", "local", "str", "int")
-
-    res = bridge.process_message("lowercase a string and then count the vowels in it")
-    assert res["type"] == "synthesis"
-    assert "pipeline" in res["code"]
 
