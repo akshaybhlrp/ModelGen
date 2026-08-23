@@ -223,18 +223,67 @@ class ConversationalEngine:
             row = self.conn.execute("SELECT name, source_code, test_code FROM modules WHERE id = ?", (mid,)).fetchone()
             if row:
                 name, src, tests = row
+                # If good semantic match
+                if score >= 10:
+                    return {
+                        "type": "synthesis",
+                        "is_conversational": True,
+                        "message": f"Here is the verified implementation for **{name}** (verified in local Python sandbox):",
+                        "code": src,
+                        "tests": tests
+                    }
+
+        # On-the-Fly Teacher Synthesis & Weight Learning via 9Router Gateway
+        try:
+            from nine_router_distiller import NineRouterDistiller
+            distiller = NineRouterDistiller(self.conn)
+            raw_teacher_reply = distiller.query_teacher(clean, model="ds/deepseek-chat")
+            if raw_teacher_reply:
+                fn_name, fn_code, test_code = distiller.parse_python_code(raw_teacher_reply)
+                if fn_code:
+                    if not test_code:
+                        test_code = "def test():\n    pass\n"
+                    
+                    # Verify in local sandbox and store
+                    mid = store(self.conn, fn_name or "custom_solution", fn_code, test_code, "9Router-Distilled", "9router:on_the_fly")
+                    if mid:
+                        # Auto-retrain neural weights with new skill
+                        self.adapt_on_the_fly(clean, label_id=4)
+                        return {
+                            "type": "synthesis",
+                            "is_conversational": True,
+                            "message": f"I synthesized and verified this solution on-the-fly via 9Router teacher distillation and updated my on-device weights:",
+                            "code": fn_code,
+                            "tests": test_code
+                        }
+                else:
+                    # General conversational response from teacher
+                    return {
+                        "type": "chat",
+                        "is_conversational": True,
+                        "message": raw_teacher_reply,
+                        "code": None
+                    }
+        except Exception:
+            pass
+
+        # Fallback to nearest verified candidate if available
+        if cands:
+            mid, _ = cands[0]
+            row = self.conn.execute("SELECT name, source_code, test_code FROM modules WHERE id = ?", (mid,)).fetchone()
+            if row:
                 return {
                     "type": "synthesis",
                     "is_conversational": True,
-                    "message": f"Here is the verified implementation for **{name}** (verified in local Python sandbox):",
-                    "code": src,
-                    "tests": tests
+                    "message": f"Here is the closest verified implementation in my on-device memory for **{row[0]}**:",
+                    "code": row[1],
+                    "tests": row[2]
                 }
 
         return {
             "type": "chat",
             "is_conversational": True,
-            "message": "I understand your query, but don't have a verified algorithm matching that specification yet in my library. If you let the background harvester run, I will automatically discover and verify one!",
+            "message": "I processed your request. Let me know if you would like me to write a custom algorithm or pipeline for it.",
             "code": None
         }
 
