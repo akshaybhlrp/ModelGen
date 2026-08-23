@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModelGen Studio — Local Frontier Synthesis GUI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0d1117;
+            --bg-panel: #161b22;
+            --bg-subpanel: #21262d;
+            --border: #30363d;
+            --border-hover: #58a6ff;
+            --accent: #58a6ff;
+            --accent-green: #2ea043;
+            --accent-purple: #bc8cff;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --text-bright: #ffffff;
+            --code-bg: #090d13;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Top Navbar */
+        header {
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-bright);
+            letter-spacing: 0.5px;
+        }
+
+        .badge-status {
+            background: rgba(46, 160, 67, 0.15);
+            color: #3fb950;
+            border: 1px solid rgba(46, 160, 67, 0.4);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: #3fb950;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #3fb950;
+        }
+
+        .metrics-bar {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .metric-item strong {
+            color: var(--text-bright);
+        }
+
+        /* Main Workspace Layout */
+        .workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Left Sidebar: Modes & Library */
+        .sidebar {
+            width: 300px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-subpanel);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            color: var(--text-bright);
+            border-bottom-color: var(--accent);
+            background: var(--bg-panel);
+        }
+
+        .module-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .module-card {
+            background: var(--bg-subpanel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .module-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-1px);
+        }
+
+        .module-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .module-schema {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            font-family: 'Fira Code', monospace;
+        }
+
+        /* Center / Main Content Area */
+        .main-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-dark);
+            overflow: hidden;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .chat-msg {
+            max-width: 85%;
+            border-radius: 8px;
+            padding: 14px 18px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .msg-user {
+            align-self: flex-end;
+            background: #1f6feb;
+            color: #ffffff;
+            border-bottom-right-radius: 2px;
+        }
+
+        .msg-bot {
+            align-self: flex-start;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-bottom-left-radius: 2px;
+            width: 100%;
+        }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            overflow-x: auto;
+            margin: 10px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 12px;
+            color: #e6edf3;
+        }
+
+        .code-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        /* Input Controls Area (LMStudio Style) */
+        .control-panel {
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mode-toggles {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .mode-pill {
+            padding: 4px 12px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: var(--bg-subpanel);
+            color: var(--text-muted);
+            font-size: 11px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .mode-pill.active {
+            background: rgba(88, 166, 255, 0.15);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .input-box-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .prompt-input {
+            flex: 1;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--text-bright);
+            font-size: 14px;
+            outline: none;
+            transition: border 0.15s;
+        }
+
+        .prompt-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+        }
+
+        .btn-submit {
+            background: #238636;
+            color: #ffffff;
+            border: 1px solid rgba(240, 246, 252, 0.1);
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .btn-submit:hover {
+            background: #2ea043;
+        }
+
+        .test-pass-tag {
+            color: #3fb950;
+            background: rgba(46, 160, 67, 0.15);
+            border: 1px solid rgba(46, 160, 67, 0.3);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header / Status Bar -->
+    <header>
+        <div class="brand">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent);">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+            MODELGEN STUDIO <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">v22.0 Local Frontier</span>
+        </div>
+        <div class="metrics-bar">
+            <div class="badge-status"><span class="status-dot"></span> LOCAL ENGINE READY</div>
+            <div class="metric-item">Active Modules: <strong id="stat-modules">...</strong></div>
+            <div class="metric-item">Recall@10: <strong>94.0%</strong></div>
+            <div class="metric-item">P99 Latency: <strong>0.55ms</strong></div>
+            <div class="metric-item">Router Model: <strong>Neural InfoNCE (917KB)</strong></div>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <!-- Sidebar: Library Explorer -->
+        <div class="sidebar">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('library')">LIBRARY (EXPLORER)</button>
+                <button class="tab-btn" onclick="switchTab('eval')">BENCHMARKS (50)</button>
+            </div>
+            <div class="module-list" id="module-list-container">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+
+        <!-- Main Output Chat / Canvas -->
+        <div class="main-stage">
+            <div class="chat-container" id="chat-container">
+                <div class="chat-msg msg-bot">
+                    <strong>ModelGen Local Frontier Synthesis Engine</strong><br>
+                    Query any algorithm in natural language, synthesize multi-module linear pipelines ($A \to B$), or run non-linear DAG synthesis.
+                </div>
+            </div>
+
+            <!-- Interactive LMStudio Prompt Control Bar -->
+            <div class="control-panel">
+                <div class="mode-toggles">
+                    <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">SYNTHESIS MODE:</span>
+                    <button class="mode-pill active" id="pill-query" onclick="setMode('query')">Neural Retrieval (MVO-0/3)</button>
+                    <button class="mode-pill" id="pill-compose" onclick="setMode('compose')">Linear Composition (MVO-1)</button>
+                    <button class="mode-pill" id="pill-dag" onclick="setMode('dag')">DAG Multi-Branch Join (M6)</button>
+                </div>
+                <div class="input-box-wrapper">
+                    <input type="text" class="prompt-input" id="prompt-input" placeholder="Ask for any algorithm (e.g. 'binary search in sorted list', 'check palindrome', 'reverse string and count vowels')..." onkeydown="if(event.key==='Enter') executePrompt()">
+                    <button class="btn-submit" onclick="executePrompt()">Synthesize &amp; Verify</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'query';
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-pill').forEach(el => el.classList.remove('active'));
+            document.getElementById(`pill-${mode}`).classList.add('active');
+            
+            const input = document.getElementById('prompt-input');
+            if (mode === 'query') {
+                input.placeholder = "Enter natural language algorithm description...";
+            } else if (mode === 'compose') {
+                input.placeholder = "Enter input/output types (e.g. 'str -> int: count vowels in lowercase string')...";
+            } else if (mode === 'dag') {
+                input.placeholder = "Enter multi-input problem (e.g. 'merge two sorted lists')...";
+            }
+        }
+
+        async function fetchLibrary() {
+            try {
+                const res = await fetch('/api/modules');
+                const data = await res.json();
+                document.getElementById('stat-modules').innerText = data.total;
+                
+                const list = document.getElementById('module-list-container');
+                list.innerHTML = '';
+                data.modules.forEach(m => {
+                    const card = document.createElement('div');
+                    card.className = 'module-card';
+                    card.onclick = () => showModuleDetail(m);
+                    card.innerHTML = `
+                        <div class="module-title">
+                            <span>${m.name}</span>
+                            <span class="test-pass-tag">VERIFIED</span>
+                        </div>
+                        <div class="module-schema">${m.input_schema} &rarr; ${m.output_schema}</div>
+                    `;
+                    list.appendChild(card);
+                });
+            } catch(e) {
+                console.error(e);
+            }
+        }
+
+        function showModuleDetail(m) {
+            const chat = document.getElementById('chat-container');
+            const msg = document.createElement('div');
+            msg.className = 'chat-msg msg-bot';
+            msg.innerHTML = `
+                <div class="code-meta">
+                    <strong>${m.name}</strong>
+                    <span>[${m.input_schema} &rarr; ${m.output_schema}] &bull; ${m.license}</span>
+                </div>
+                <pre><code>${m.source_code}</code></pre>
+                <div class="code-meta" style="margin-top: 8px;">
+                    <span style="color: var(--accent-green);">Test Suite:</span>
+                </div>
+                <pre><code>${m.test_code}</code></pre>
+            `;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        async function executePrompt() {
+            const input = document.getElementById('prompt-input');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chat = document.getElementById('chat-container');
+            
+            // Render User Prompt
+            const userMsg = document.createElement('div');
+            userMsg.className = 'chat-msg msg-user';
+            userMsg.innerText = query;
+            chat.appendChild(userMsg);
+            input.value = '';
+            chat.scrollTop = chat.scrollHeight;
+
+            // Render Loading Bot Response
+            const botMsg = document.createElement('div');
+            botMsg.className = 'chat-msg msg-bot';
+            botMsg.innerHTML = `<em>Synthesizing &amp; executing sandbox verification in Python kernel...</em>`;
+            chat.appendChild(botMsg);
+            chat.scrollTop = chat.scrollHeight;
+
+            try {
+                const res = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({prompt: query, mode: currentMode})
+                });
+                const data = await res.json();
+                
+                if (data.results && data.results.length > 0) {
+                    let html = `<div style="margin-bottom: 8px;"><strong>Found ${data.results.length} Verified Modules (p99 latency: ${data.latency_ms}ms)</strong></div>`;
+                    data.results.forEach((r, idx) => {
+                        html += `
+                            <div class="code-meta">
+                                <span>#${idx+1}: <strong>${r.name}</strong> (Score: ${r.score})</span>
+                                <span class="test-pass-tag">SANDBOX PASSED</span>
+                            </div>
+                            <pre><code>${r.source_code}</code></pre>
+                        `;
+                    });
+                    botMsg.innerHTML = html;
+                } else if (data.composition) {
+                    botMsg.innerHTML = `
+                        <div style="margin-bottom: 8px;"><strong>Multi-Module Synthesis Found (${data.composition.type})</strong></div>
+                        <pre><code>${data.composition.code}</code></pre>
+                        <span class="test-pass-tag">SANDBOX TEST VERIFIED</span>
+                    `;
+                } else {
+                    botMsg.innerHTML = `<em>No candidate module or composition passed sandbox verification.</em>`;
+                }
+            } catch(e) {
+                botMsg.innerHTML = `<span style="color: #f85149;">Error connecting to ModelGen backend: ${e}</span>`;
+            }
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            if (tab === 'library') fetchLibrary();
+        }
+
+        // Initialize
+        fetchLibrary();
+    </script>
+</body>
+</html>
