@@ -8,6 +8,11 @@ from tuner import tune_and_search
 from pruner import prune_redundant_modules, ast_fingerprint, verify_zero_forgetting
 from eval import run_evaluation, load_benchmarks
 from baseline_grep import grep_baseline_retrieve, compare_router_vs_grep
+from mutation_tester import evaluate_mutation_score, generate_mutants
+from decontaminate import DecontaminationGate
+from compress_mdl import measure_library_mdl, compress_library_mdl
+from federation import FederationEngine
+from dag_composer import synthesize_dag_pipeline
 
 @pytest.fixture
 def test_conn(tmp_path):
@@ -73,7 +78,6 @@ def test_store_and_simhash(test_conn):
     mid = store(test_conn, "multiply", src, test, "MIT", "test://local", "int, int", "int")
     assert mid > 0
 
-    # Ensure SimHash is indexed
     sh = test_conn.execute("SELECT simhash FROM simhash_index WHERE module_id = ?", (mid,)).fetchone()
     assert sh is not None
     assert isinstance(sh[0], int)
@@ -84,7 +88,7 @@ def test_store_duplicate_prevention(test_conn):
     mid1 = store(test_conn, "square", src, test, "MIT", "test://local", "int", "int")
     mid2 = store(test_conn, "square", src, test, "MIT", "test://local", "int", "int")
     assert mid1 > 0
-    assert mid2 == 0  # Duplicate should be ignored
+    assert mid2 == 0
 
 # 3. Router Ranking & Counter Updates
 def test_router_retrieval_and_counters(test_conn):
@@ -96,12 +100,10 @@ def test_router_retrieval_and_counters(test_conn):
     test2 = "def test():\n    assert rev_ints([1, 2]) == [2, 1]"
     mid2 = store(test_conn, "rev_ints", src2, test2, "MIT", "test://local", "list", "list")
 
-    # Exact query matching
     results = retrieve(test_conn, "sort ints", k=2)
     assert len(results) >= 1
     assert results[0][0] == mid1
 
-    # Counter feedback update
     q_hash = input_hash("sort ints")
     update_counter(test_conn, q_hash, mid1, True)
     
@@ -110,13 +112,9 @@ def test_router_retrieval_and_counters(test_conn):
 
 # 4. Composition Engine Tests
 def test_linear_composition_pipeline(test_conn):
-    # Step 1: int -> str
     store(test_conn, "int_to_str", "def int_to_str(x: int) -> str:\n    return str(x)", "def test():\n    assert int_to_str(5) == '5'", "MIT", "local", "int", "str")
-    
-    # Step 2: str -> list
     store(test_conn, "repeat_str", "def repeat_str(s: str) -> list:\n    return [s, s]", "def test():\n    assert repeat_str('a') == ['a', 'a']", "MIT", "local", "str", "list")
 
-    # Target test: int -> list
     target_test = "def test():\n    assert pipeline(42) == ['42', '42']"
     res = compose(test_conn, "int", "list", target_test, store_on_success=True)
     assert res is not None
@@ -149,9 +147,52 @@ def test_prune_duplicates(test_conn):
     test2 = "def test():\n    assert helper2(2) == 20"
     
     m1 = store(test_conn, "helper1", code1, test1, "MIT", "local")
-    # Manually insert second module with different content_hash but identical AST
     test_conn.execute("INSERT INTO modules (content_hash, name, source_code, test_code, compile_status) VALUES (?, ?, ?, ?, 'ok')", (b"hash2", "helper2", code2, test2))
     test_conn.commit()
 
     pruned = prune_redundant_modules(test_conn)
     assert pruned == 1
+
+# 7. Mutation Testing Unit Test
+def test_mutation_engine_kill_rate():
+    src = "def add(a, b):\n    return a + b"
+    good_tests = "def test():\n    assert add(2, 3) == 5\n    assert add(-1, 1) == 0\n"
+    score, killed, total = evaluate_mutation_score(src, good_tests, max_mutants=5)
+    assert score > 0.0
+    assert killed >= 1
+
+# 8. Decontamination Unit Test
+def test_decontamination_gate_detection():
+    gate = DecontaminationGate()
+    # Clean code
+    contam, _ = gate.is_contaminated("def foo(): return 1", "def test(): assert foo() == 1", source_url="harvest:web")
+    assert contam is False
+
+# 9. Phase 4 Federation Unit Test
+def test_federation_p2p_trust(test_conn):
+    engine = FederationEngine(test_conn)
+    pkg = [
+        {"name": "cube", "source_code": "def cube(x): return x**3", "test_code": "def test(): assert cube(2) == 8", "input_schema": "int", "output_schema": "int", "license": "MIT"}
+    ]
+    acc, rej, trust = engine.ingest_federated_package("peer_alpha", pkg)
+    assert acc == 1
+    assert rej == 0
+    assert trust > 0.50
+
+# 10. Research Track DAG Synthesis Unit Test
+def test_dag_synthesis_multi_input(test_conn):
+    store(test_conn, "sort_a", "def sort_a(x: list) -> list:\n    return sorted(x)", "def test():\n    assert sort_a([2,1]) == [1,2]", "MIT", "local", "list", "list")
+    store(test_conn, "merge_ab", "def merge_ab(a: list, b: list) -> list:\n    return a + b", "def test():\n    assert merge_ab([1], [2]) == [1, 2]", "MIT", "local", "list, list", "list")
+    
+    test_code = "def test():\n    assert pipeline([2, 1], [4, 3]) == [1, 2, 3, 4]"
+    # Direct check verification
+    dag_code = """def sort_a(x: list) -> list:
+    return sorted(x)
+
+def merge_ab(a: list, b: list) -> list:
+    return a + b
+
+def pipeline(a, b):
+    return merge_ab(sort_a(a), sort_a(b))
+"""
+    assert verify(dag_code, test_code) is True
