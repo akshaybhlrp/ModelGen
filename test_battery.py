@@ -196,3 +196,47 @@ def pipeline(a, b):
     return merge_ab(sort_a(a), sort_a(b))
 """
     assert verify(dag_code, test_code) is True
+
+# 11. Rigorous Conversational Bridge Unit Tests
+def test_conversational_bridge_greetings(test_conn):
+    from conversational_bridge import ConversationalBridge
+    bridge = ConversationalBridge(test_conn)
+
+    for greeting in ["hello", "hi", "hey", "hola", "greetings", "good morning", "good evening"]:
+        res = bridge.process_message(greeting)
+        assert res["type"] == "chat"
+        assert "Hello! I am ModelGen" in res["message"]
+        assert res["code"] is None
+
+def test_conversational_bridge_identity_and_help(test_conn):
+    from conversational_bridge import ConversationalBridge
+    bridge = ConversationalBridge(test_conn)
+
+    for q in ["who are you", "what are you", "what can you do", "help", "how do you work"]:
+        res = bridge.process_message(q)
+        assert res["type"] == "chat"
+        assert "I am ModelGen" in res["message"]
+        assert "Deterministic Code Synthesis" in res["message"]
+
+def test_conversational_bridge_code_synthesis(test_conn):
+    from conversational_bridge import ConversationalBridge
+    bridge = ConversationalBridge(test_conn)
+
+    store(test_conn, "is_palindrome", "def is_palindrome(s: str) -> bool:\n    return s == s[::-1]", "def test(): assert is_palindrome('aba') == True", "MIT", "local", "str", "bool")
+
+    res = bridge.process_message("How do I check if a string is a palindrome?")
+    assert res["type"] == "synthesis"
+    assert "is_palindrome" in res["code"]
+    assert res["tests"] is not None
+
+def test_conversational_bridge_sequential_composition(test_conn):
+    from conversational_bridge import ConversationalBridge
+    bridge = ConversationalBridge(test_conn)
+
+    store(test_conn, "to_lower", "def to_lower(s: str) -> str:\n    return s.lower()", "def test(): assert to_lower('A') == 'a'", "MIT", "local", "str", "str")
+    store(test_conn, "count_vowels", "def count_vowels(s: str) -> int:\n    return sum(1 for c in s if c in 'aeiou')", "def test(): assert count_vowels('a') == 1", "MIT", "local", "str", "int")
+
+    res = bridge.process_message("lowercase a string and then count the vowels in it")
+    assert res["type"] == "synthesis"
+    assert "pipeline" in res["code"]
+
