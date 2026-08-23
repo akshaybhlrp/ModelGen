@@ -27,13 +27,22 @@ TOPICS = [
 def run_daemon_cycle(conn, token: str):
     print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting background harvesting cycle...")
     
-    # 1. Harvesting pass (GitHub API + Stealth Browser Emulation)
-    harvest_batch(conn, TOPICS, token=token, max_pages_per_topic=2)
-    
-    # 1b. Stealth Browser Web Crawl (Browser Fingerprints + Human Jitter)
-    from stealth_harvester import StealthWebHarvester
-    stealth = StealthWebHarvester(conn)
-    stealth.harvest_public_sources(max_items_per_topic=2)
+    # 1. Stealth Browser Web Crawl (Browser Fingerprints + Human Jitter)
+    try:
+        from stealth_harvester import StealthWebHarvester
+        stealth = StealthWebHarvester(conn)
+        stealth.harvest_public_sources(max_items_per_topic=3)
+    except Exception as e:
+        print(f"[!] Stealth harvest error: {e}")
+
+    # 1b. 9Router Frontier Teacher Distillation
+    try:
+        from nine_router_distiller import NineRouterDistiller
+        distiller = NineRouterDistiller(conn)
+        distilled = distiller.distill_frontier_batch()
+        print(f"[+] Distilled {distilled} frontier modules from 9Router teachers.")
+    except Exception as e:
+        print(f"[!] 9Router distillation error: {e}")
     
     # 2. Decontamination audit
     run_decontamination_audit(conn)
@@ -43,6 +52,13 @@ def run_daemon_cycle(conn, token: str):
     
     # 4. AST deduplication & pruning
     prune_redundant_modules(conn)
+    
+    # 5. Continuous Neural Router Retraining
+    try:
+        from learned_router import train_learned_router
+        train_learned_router(conn, epochs=5)
+    except Exception:
+        pass
     
     total = conn.execute("SELECT COUNT(*) FROM modules WHERE compile_status = 'ok'").fetchone()[0]
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Cycle complete. Total active verified modules: {total}")
