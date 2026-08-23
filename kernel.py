@@ -66,6 +66,9 @@ def compute_simhash(text: str) -> int:
     for i in range(64):
         if v[i] > 0:
             fingerprint |= (1 << i)
+    # Convert to signed 64-bit int for SQLite compatibility
+    if fingerprint >= (1 << 63):
+        fingerprint -= (1 << 64)
     return fingerprint
 
 def verify(source: str, tests: str, timeout: float = 2.0) -> bool:
