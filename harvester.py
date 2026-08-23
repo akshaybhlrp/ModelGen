@@ -65,11 +65,14 @@ def extract_ast(content: str):
             results.append((fn_name, fn_code, test_block))
     return results
 
-def harvest_continuous(conn, pages_per_query=5):
+def harvest_batch(conn, queries=SEARCH_QUERIES, token: str = "", max_pages_per_topic: int = 2):
+    global HEADERS
+    if token:
+        HEADERS = {"Authorization": f"token {token}"}
     cands, stored = 0, 0
-    for q in SEARCH_QUERIES:
+    for q in queries:
         print(f"\n[+] Harvesting topic: {q}")
-        for page in range(1, pages_per_query + 1):
+        for page in range(1, max_pages_per_topic + 1):
             try:
                 res = search(q, page=page)
                 items = res.get("items", [])
@@ -82,15 +85,18 @@ def harvest_continuous(conn, pages_per_query=5):
                         content = fetch(raw_url)
                         extracted = extract_ast(content)
                         for fn_name, fn_code, test_code in extracted:
-                            if store(conn, fn_name, fn_code, test_code, "MIT", item["html_url"]):
+                            if store(conn, fn_name, fn_code, test_code, "MIT", f"harvest:{item['html_url']}"):
                                 stored += 1
                     except Exception:
                         continue
-                print(f"    Page {page}/{pages_per_query}: Stored={stored} | Candidates={cands}")
+                print(f"    Page {page}/{max_pages_per_topic}: Stored={stored} | Candidates={cands}")
             except Exception as e:
                 print(f"    Page {page} error: {e}")
-            time.sleep(2)
+            time.sleep(1)
     return cands, stored
+
+def harvest_continuous(conn, pages_per_query=5):
+    return harvest_batch(conn, SEARCH_QUERIES, max_pages_per_topic=pages_per_query)
 
 if __name__ == "__main__":
     conn = init_db()
