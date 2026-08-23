@@ -24,28 +24,20 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-FRONTIER_MODELS = [
-    "ds/deepseek-chat",
-    "kimi/kimi-for-coding",
-    "ae/claude-sonnet-5"
+ACTIVE_TEACHER_MODELS = [
+    "gemini/gemini-3.7-flash",
+    "kr/claude-sonnet-4.5",
+    "gh/gpt-4o",
+    "kr/auto",
+    "openrouter/openrouter/free",
+    "gemini/gemini-3.5-flash-lite"
 ]
 
-SYNTHESIS_PROMPT = """You are an expert algorithm designer. Write a clean, self-contained Python function for the following algorithmic task.
-Include a comprehensive test function named `test()` with at least 3 assert statements verifying edge cases.
-Respond ONLY with executable Python code enclosed in ```python ... ``` without conversational markdown.
-
-Task: {task}
-"""
-
-SAMPLE_FRONTIER_TASKS = [
+DEFAULT_DISTILL_TASKS = [
     "Implement an LRU Cache class with get and put operations in O(1) time complexity.",
     "Implement Trie (Prefix Tree) with insert, search, and startsWith methods.",
-    "Find the longest increasing subsequence length in an array using dynamic programming and binary search in O(n log n).",
-    "Implement topological sort on a directed acyclic graph represented as an adjacency list.",
-    "Implement Kadane algorithm to find the maximum sum of a contiguous subarray.",
-    "Compute modular inverse of a number under a prime modulus using Extended Euclidean Algorithm.",
-    "Implement Union-Find (Disjoint Set Union) with path compression and rank optimization.",
-    "Implement Knuth-Morris-Pratt (KMP) string pattern matching algorithm."
+    "Find the longest increasing subsequence length in an array in O(n log n).",
+    "Implement Kadane algorithm to find the maximum sum of a contiguous subarray."
 ]
 
 class NineRouterDistiller:
@@ -58,27 +50,61 @@ class NineRouterDistiller:
         }
         self.decontam = DecontaminationGate()
 
-    def query_teacher(self, prompt: str, model: str = "ds/deepseek-chat") -> str:
+    def query_teacher(self, prompt: str, model: str = None) -> str:
+        models_to_try = [model] if model else ACTIVE_TEACHER_MODELS
+        if not model:
+            models_to_try = ACTIVE_TEACHER_MODELS
+
         url = f"{self.base_url}/chat/completions"
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "You are a competitive programming code generator. Output only clean Python code with verification test assertions."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.2
-        }
-        try:
-            res = requests.post(url, headers=self.headers, json=payload, timeout=30)
-            if res.status_code == 200:
-                data = res.json()
-                return data["choices"][0]["message"]["content"]
-            else:
-                print(f"[!] 9Router query failed ({res.status_code}): {res.text}")
-                return ""
-        except Exception as e:
-            print(f"[!] 9Router connection error: {e}")
-            return ""
+        for m in models_to_try:
+            if not m: continue
+            payload = {
+                "model": m,
+                "messages": [
+                    {"role": "system", "content": "You are ModelGen's frontier neural intelligence engine. Answer any question, write code, explain concepts, or chat accurately and concisely. When writing Python code, enclose in ```python ... ``` with a verification test function test()."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 1024,
+                "stream": False
+            }
+            try:
+                res = requests.post(url, headers=self.headers, json=payload, timeout=15)
+                if res.status_code == 200:
+                    text_resp = res.text.strip()
+                    # 1. Try standard JSON
+                    try:
+                        data = res.json()
+                        if "choices" in data and len(data["choices"]) > 0:
+                            choice = data["choices"][0]
+                            if "message" in choice and "content" in choice["message"]:
+                                return choice["message"]["content"]
+                            if "text" in choice:
+                                return choice["text"]
+                    except Exception:
+                        pass
+
+                    # 2. Try parsing Server-Sent Events (SSE) streaming format
+                    chunks = []
+                    for line in text_resp.splitlines():
+                        line = line.strip()
+                        if line.startswith("data:") and not line.startswith("data: [DONE]"):
+                            json_str = line[5:].strip()
+                            try:
+                                d = json.loads(json_str)
+                                choices = d.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    if "content" in delta and delta["content"]:
+                                        chunks.append(delta["content"])
+                                    elif "text" in choices[0]:
+                                        chunks.append(choices[0]["text"])
+                            except Exception:
+                                pass
+                    if chunks:
+                        return "".join(chunks)
+            except Exception:
+                continue
+        return ""
 
     def parse_python_code(self, raw_response: str):
         # Extract code inside ```python blocks or raw text
@@ -142,7 +168,7 @@ class NineRouterDistiller:
             return True
         return False
 
-    def distill_frontier_batch(self, tasks=SAMPLE_FRONTIER_TASKS, model="ds/deepseek-chat"):
+    def distill_frontier_batch(self, tasks=DEFAULT_DISTILL_TASKS, model=None):
         learned = 0
         for task in tasks:
             if self.distill_task(task, model=model):

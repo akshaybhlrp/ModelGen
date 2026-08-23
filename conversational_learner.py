@@ -119,14 +119,30 @@ class ConversationalEngine:
         return train_conversational_model()
 
     def predict_intent(self, text: str) -> str:
-        tokens = [self.vocab.get(w, self.vocab["<unk>"]) for w in tokenize(text)]
-        if not tokens:
+        tokens_raw = tokenize(text)
+        if not tokens_raw:
             return "GREETING"
+            
+        low = text.lower().strip()
+        # Direct exact greetings
+        if low in {"hi", "hello", "hey", "hola", "greetings", "good morning", "good evening", "hi modelgen", "hello modelgen"}:
+            return "GREETING"
+        if any(p in low for p in ["who are you", "what are you", "what can you do", "help", "how do you work"]):
+            return "IDENTITY_META"
+        if low in {"thanks", "thank you", "cool", "awesome", "bye", "goodbye"}:
+            return "CASUAL_CHAT"
+            
+        tokens = [self.vocab.get(w, self.vocab["<unk>"]) for w in tokens_raw]
         inp = torch.tensor([tokens], dtype=torch.long)
         with torch.no_grad():
             logits = self.model(inp)
             pred = torch.argmax(logits, dim=1).item()
-        return INTENT_LABELS.get(pred, "CODE_SYNTHESIS")
+        
+        # If model predicted greeting on a long complex sentence with novel words, default to GENERAL_QUERY
+        res = INTENT_LABELS.get(pred, "CODE_SYNTHESIS")
+        if res == "GREETING" and len(tokens_raw) > 3:
+            return "CODE_SYNTHESIS"
+        return res
 
     def adapt_on_the_fly(self, text: str, label_id: int):
         """Performs immediate online gradient descent to update neural weights on-the-fly."""
@@ -237,7 +253,7 @@ class ConversationalEngine:
         try:
             from nine_router_distiller import NineRouterDistiller
             distiller = NineRouterDistiller(self.conn)
-            raw_teacher_reply = distiller.query_teacher(clean, model="ds/deepseek-chat")
+            raw_teacher_reply = distiller.query_teacher(clean)
             if raw_teacher_reply:
                 fn_name, fn_code, test_code = distiller.parse_python_code(raw_teacher_reply)
                 if fn_code:
