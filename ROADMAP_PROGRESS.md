@@ -66,7 +66,11 @@
   - [x] Implemented 2-branch split-and-join DAG synthesis in `dag_composer.py`
   - [x] Successfully generated and verified multi-input merge pipeline (`sort_list(a)` + `sort_list(b)` $\to$ `merge_sorted`)
 
-- [x] **Task 8: Production CLI & Final Test Battery**
+- [x] **Task 8: Production CLI, GUI & Final Test Battery**
   - [x] Build clean CLI tool `cli.py` for querying, composing, and evaluating
-  - [x] Run full automated test battery (`pytest test_battery.py` — 12/12 PASS in 1.08s)
-  - [x] Commit and push all milestones to GitHub
+  - [x] Implement LMStudio-style interactive GUI `app_gui.py` & `web/index.html` on port 8080
+  - [x] Package ModelGen as an installable standalone package with `pyproject.toml`
+  - [x] Integrate `ConversationalBridge` for natural language conversational intent handling
+  - [x] Run continuous background ingestion daemon `daemon.py` with live decontamination, mutation testing, and deduplication
+  - [x] Run full automated test battery (`pytest test_battery.py` — 16/16 PASS in 1.41s)
+  - [x] Commit and push all milestones to GitHub (`main` & `feat/frontier-v22-pipeline`)
