@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modelgen"
+version = "22.0.0"
+description = "Laptop Frontier: Local Verifier-Gated Skill Library & Program Synthesis Engine"
+readme = "README.md"
+authors = [{ name = "Akshay Bhalerao" }]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0.0",
+    "requests>=2.28.0",
+    "pytest>=7.0.0"
+]
+
+[project.scripts]
+modelgen = "cli:main"
+modelgen-gui = "app_gui:run_server"
+
+[tool.setuptools]
+py-modules = [
+    "kernel",
+    "cli",
+    "compose",
+    "dag_composer",
+    "tuner",
+    "pruner",
+    "eval",
+    "learned_router",
+    "mutation_tester",
+    "decontaminate",
+    "compress_mdl",
+    "federation",
+    "self_learning_progress",
+    "app_gui"
+]
