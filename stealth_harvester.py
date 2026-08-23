@@ -123,22 +123,29 @@ class StealthWebHarvester:
                         default_branch = repo.get("default_branch", "master")
                         print(f"  [+] Inspecting repository: {repo_name} (branch: {default_branch})")
                         
-                        # Inspect key algorithm files
-                        candidate_paths = [
-                            f"https://raw.githubusercontent.com/{repo_name}/{default_branch}/algorithms.py",
-                            f"https://raw.githubusercontent.com/{repo_name}/{default_branch}/solution.py",
-                            f"https://raw.githubusercontent.com/{repo_name}/{default_branch}/test_solution.py"
-                        ]
-                        
-                        for p in candidate_paths:
-                            self.human_delay(0.5, 1.2)
-                            raw_code = self.fetch_page_stealth(p)
-                            if raw_code and len(raw_code) > 40:
-                                extracted = self.extract_python_ast(raw_code)
-                                for fn_name, fn_code, test_code in extracted:
-                                    if store(self.conn, fn_name, fn_code, test_code, "MIT", f"stealth_web:{p}"):
-                                        total_stored += 1
-                                        print(f"    -> [VERIFIED & LEARNED] Stored {fn_name} from stealth web crawl")
+                        # Dynamically discover Python source files via git tree API
+                        tree_url = f"https://api.github.com/repos/{repo_name}/git/trees/{default_branch}?recursive=1"
+                        try:
+                            tree_res = self.session.get(tree_url, headers=get_stealth_headers(), timeout=10)
+                            if tree_res.status_code == 200:
+                                files = [t["path"] for t in tree_res.json().get("tree", []) if t["path"].endswith(".py") and not t["path"].startswith(".")]
+                                # Select top algorithm files
+                                algo_files = [f for f in files if any(k in f.lower() for k in ["sort", "search", "algo", "math", "graph", "tree", "string", "test"])][:4]
+                                if not algo_files and files:
+                                    algo_files = files[:3]
+                                    
+                                for fpath in algo_files:
+                                    self.human_delay(0.5, 1.2)
+                                    raw_url = f"https://raw.githubusercontent.com/{repo_name}/{default_branch}/{fpath}"
+                                    raw_code = self.fetch_page_stealth(raw_url)
+                                    if raw_code and len(raw_code) > 40:
+                                        extracted = self.extract_python_ast(raw_code)
+                                        for fn_name, fn_code, test_code in extracted:
+                                            if store(self.conn, fn_name, fn_code, test_code, "MIT", f"stealth_web:{raw_url}"):
+                                                total_stored += 1
+                                                print(f"    -> [VERIFIED & LEARNED] Stored #{total_stored}: {fn_name} from {fpath}")
+                        except Exception as te:
+                            pass
             except Exception as e:
                 print(f"  [!] Stealth crawl warning: {e}")
                 
