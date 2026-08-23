@@ -120,12 +120,32 @@ def retrieve(conn, query: str, k: int = 10):
     if exact:
         return exact
 
-    # Tier 2: Hybrid TF-IDF Keyword Matching + SimHash LSH Nearest Neighbor
+    # Tier 2: Hybrid TF-IDF Keyword Matching + SimHash LSH + Learned Neural Router
     q_tokens = set(normalize(query).split())
     q_sh = compute_simhash(query)
     
     all_mods = conn.execute("SELECT id, name, source_code, input_schema, output_schema FROM modules WHERE compile_status = 'ok'").fetchall()
     sim_dict = dict(conn.execute("SELECT module_id, simhash FROM simhash_index").fetchall())
+
+    # Optional: Neural Router Embedding Scores
+    neural_scores = {}
+    try:
+        from learned_router import load_learned_router, text_to_tensor
+        import torch
+        router_model, vocab = load_learned_router()
+        if router_model and vocab:
+            router_model.eval()
+            with torch.no_grad():
+                q_t = text_to_tensor(query, vocab)
+                q_emb = router_model(q_t) # (1, 64)
+                
+                for mid, name, src, _, _ in all_mods:
+                    c_t = text_to_tensor(f"{name} {src}", vocab)
+                    c_emb = router_model(c_t)
+                    dot = torch.sum(q_emb * c_emb).item()
+                    neural_scores[mid] = max(0.0, dot) * 25.0
+    except Exception:
+        pass
     
     scored = []
     for mid, name, src, in_s, out_s in all_mods:
@@ -136,7 +156,7 @@ def retrieve(conn, query: str, k: int = 10):
         name_overlap = len(q_tokens & name_tokens)
         code_overlap = len(q_tokens & code_tokens)
         
-        # Subword / abbreviation matching (e.g. 'run length encoding' -> 'rle', 'reverse polish notation' -> 'rpn')
+        # Subword / abbreviation matching
         subword_overlap = 0
         for qt in q_tokens:
             if len(qt) >= 3 and any(qt in nt for nt in name_tokens):
@@ -153,8 +173,11 @@ def retrieve(conn, query: str, k: int = 10):
         dist = bin((q_sh ^ sh) & 0xFFFFFFFFFFFFFFFF).count('1')
         sim_score = max(0, 64 - dist)
         
+        # Learned neural similarity component
+        neural_boost = neural_scores.get(mid, 0.0)
+        
         # Composite score
-        total_score = (name_overlap * 20.0) + (subword_overlap * 10.0) + (code_overlap * 2.0) + (sim_score * 0.1)
+        total_score = (name_overlap * 20.0) + (subword_overlap * 10.0) + (code_overlap * 2.0) + (sim_score * 0.1) + neural_boost
         scored.append((mid, total_score))
         
     scored.sort(key=lambda x: x[1], reverse=True)
