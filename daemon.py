@@ -42,9 +42,31 @@ def run_daemon_cycle(conn, token: str):
     total = conn.execute("SELECT COUNT(*) FROM modules WHERE compile_status = 'ok'").fetchone()[0]
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Cycle complete. Total active verified modules: {total}")
 
-if __name__ == "__main__":
+def run_daemon_loop(interval_seconds: int = 60):
     token = os.environ.get("GITHUB_TOKEN", "")
     conn = init_db()
     
-    # Single execution cycle
-    run_daemon_cycle(conn, token)
+    print(f"[+] ModelGen Continuous Background Learning Daemon Started (Interval: {interval_seconds}s)")
+    
+    cycle_num = 1
+    while True:
+        try:
+            print(f"\n==================================================")
+            print(f"   AUTONOMOUS BACKGROUND LEARNING CYCLE #{cycle_num}")
+            print(f"==================================================")
+            run_daemon_cycle(conn, token)
+            
+            # Auto-retrain neural router weights on newly ingested skills
+            from learned_router import train_learned_router
+            train_learned_router(conn, epochs=10)
+            
+            cycle_num += 1
+        except Exception as e:
+            print(f"[!] Error in background learning cycle: {e}")
+            
+        print(f"\n[+] Sleeping for {interval_seconds}s before next autonomous background harvest...")
+        time.sleep(interval_seconds)
+
+if __name__ == "__main__":
+    interval = int(os.environ.get("HARVEST_INTERVAL", "60"))
+    run_daemon_loop(interval_seconds=interval)
