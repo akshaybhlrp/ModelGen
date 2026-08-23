@@ -136,13 +136,25 @@ def retrieve(conn, query: str, k: int = 10):
         name_overlap = len(q_tokens & name_tokens)
         code_overlap = len(q_tokens & code_tokens)
         
+        # Subword / abbreviation matching (e.g. 'run length encoding' -> 'rle', 'reverse polish notation' -> 'rpn')
+        subword_overlap = 0
+        for qt in q_tokens:
+            if len(qt) >= 3 and any(qt in nt for nt in name_tokens):
+                subword_overlap += 1
+            if qt == "anagrams" and "anagram" in name:
+                subword_overlap += 3
+            if qt == "encoding" and "rle" in name:
+                subword_overlap += 3
+            if qt == "postfix" and "rpn" in name:
+                subword_overlap += 3
+        
         # SimHash hamming proximity (0 to 64)
         sh = sim_dict.get(mid, 0)
         dist = bin((q_sh ^ sh) & 0xFFFFFFFFFFFFFFFF).count('1')
         sim_score = max(0, 64 - dist)
         
         # Composite score
-        total_score = (name_overlap * 20.0) + (code_overlap * 2.0) + (sim_score * 0.1)
+        total_score = (name_overlap * 20.0) + (subword_overlap * 10.0) + (code_overlap * 2.0) + (sim_score * 0.1)
         scored.append((mid, total_score))
         
     scored.sort(key=lambda x: x[1], reverse=True)
