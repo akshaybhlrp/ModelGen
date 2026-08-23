@@ -11,7 +11,9 @@ from pathlib import Path
 DB_PATH = Path("frontier.db")
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript('''
         CREATE TABLE IF NOT EXISTS modules (
             id INTEGER PRIMARY KEY,

@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+import json
+from pathlib import Path
+
+BENCHMARK_FILE = Path("benchmarks_50.json")
+
+EVAL_SUITE_50 = [
+    # Algorithms (1-10)
+    {
+        "id": 1,
+        "category": "algorithms",
+        "desc": "sort a list of integers in ascending order",
+        "tests": "def test():\n    assert sort_list([3, 1, 2]) == [1, 2, 3]\n    assert sort_list([]) == []\n    assert sort_list([5]) == [5]\n"
+    },
+    {
+        "id": 2,
+        "category": "algorithms",
+        "desc": "binary search for an integer in a sorted list returning its index or -1",
+        "tests": "def test():\n    assert binary_search([1, 2, 3, 4, 5], 3) == 2\n    assert binary_search([1, 2, 4], 3) == -1\n    assert binary_search([], 1) == -1\n"
+    },
+    {
+        "id": 3,
+        "category": "algorithms",
+        "desc": "compute the nth fibonacci number",
+        "tests": "def test():\n    assert fibonacci(0) == 0\n    assert fibonacci(1) == 1\n    assert fibonacci(7) == 13\n"
+    },
+    {
+        "id": 4,
+        "category": "algorithms",
+        "desc": "compute factorial of a non-negative integer n",
+        "tests": "def test():\n    assert factorial(0) == 1\n    assert factorial(1) == 1\n    assert factorial(5) == 120\n"
+    },
+    {
+        "id": 5,
+        "category": "algorithms",
+        "desc": "find the greatest common divisor of two integers a and b",
+        "tests": "def test():\n    assert gcd(48, 18) == 6\n    assert gcd(10, 5) == 5\n    assert gcd(7, 3) == 1\n"
+    },
+    {
+        "id": 6,
+        "category": "algorithms",
+        "desc": "check if an integer n is prime",
+        "tests": "def test():\n    assert is_prime(2) == True\n    assert is_prime(11) == True\n    assert is_prime(4) == False\n    assert is_prime(1) == False\n"
+    },
+    {
+        "id": 7,
+        "category": "algorithms",
+        "desc": "merge two sorted integer lists into one sorted list",
+        "tests": "def test():\n    assert merge_sorted([1, 3, 5], [2, 4, 6]) == [1, 2, 3, 4, 5, 6]\n    assert merge_sorted([], [1]) == [1]\n"
+    },
+    {
+        "id": 8,
+        "category": "algorithms",
+        "desc": "find the maximum subarray sum using kadane algorithm",
+        "tests": "def test():\n    assert max_subarray_sum([-2, 1, -3, 4, -1, 2, 1, -5, 4]) == 6\n    assert max_subarray_sum([1, 2, 3]) == 6\n"
+    },
+    {
+        "id": 9,
+        "category": "algorithms",
+        "desc": "compute the power of a number x raised to integer y",
+        "tests": "def test():\n    assert power(2, 3) == 8\n    assert power(5, 0) == 1\n"
+    },
+    {
+        "id": 10,
+        "category": "algorithms",
+        "desc": "find the lowest common multiple of two integers a and b",
+        "tests": "def test():\n    assert lcm(4, 6) == 12\n    assert lcm(5, 7) == 35\n"
+    },
+
+    # Strings (11-20)
+    {
+        "id": 11,
+        "category": "strings",
+        "desc": "reverse a given string",
+        "tests": "def test():\n    assert reverse_str('hello') == 'olleh'\n    assert reverse_str('') == ''\n"
+    },
+    {
+        "id": 12,
+        "category": "strings",
+        "desc": "check if a string is a palindrome",
+        "tests": "def test():\n    assert is_palindrome('radar') == True\n    assert is_palindrome('hello') == False\n    assert is_palindrome('') == True\n"
+    },
+    {
+        "id": 13,
+        "category": "strings",
+        "desc": "count the number of vowels in a string",
+        "tests": "def test():\n    assert count_vowels('apple') == 2\n    assert count_vowels('xyz') == 0\n"
+    },
+    {
+        "id": 14,
+        "category": "strings",
+        "desc": "convert string to title case capitalizing first letter of each word",
+        "tests": "def test():\n    assert to_title_case('hello world') == 'Hello World'\n"
+    },
+    {
+        "id": 15,
+        "category": "strings",
+        "desc": "remove all whitespace from a string",
+        "tests": "def test():\n    assert remove_whitespace(' a b c ') == 'abc'\n"
+    },
+    {
+        "id": 16,
+        "category": "strings",
+        "desc": "check if two strings are anagrams of each other",
+        "tests": "def test():\n    assert is_anagram('listen', 'silent') == True\n    assert is_anagram('hello', 'world') == False\n"
+    },
+    {
+        "id": 17,
+        "category": "strings",
+        "desc": "compress a string using run-length encoding",
+        "tests": "def test():\n    assert rle_encode('aabcccccaaa') == 'a2b1c5a3'\n"
+    },
+    {
+        "id": 18,
+        "category": "strings",
+        "desc": "truncate string to maximum length adding ellipsis if trimmed",
+        "tests": "def test():\n    assert truncate_str('hello world', 5) == 'hello...'\n    assert truncate_str('hi', 5) == 'hi'\n"
+    },
+    {
+        "id": 19,
+        "category": "strings",
+        "desc": "find the first non repeating character in a string returning None if none",
+        "tests": "def test():\n    assert first_unique_char('swiss') == 'w'\n    assert first_unique_char('aabb') is None\n"
+    },
+    {
+        "id": 20,
+        "category": "strings",
+        "desc": "convert camelcase string to snake case",
+        "tests": "def test():\n    assert camel_to_snake('camelCaseTest') == 'camel_case_test'\n"
+    },
+
+    # Data Structures & Lists (21-30)
+    {
+        "id": 21,
+        "category": "data_structures",
+        "desc": "remove duplicate items from a list preserving original order",
+        "tests": "def test():\n    assert remove_duplicates([1, 2, 2, 3, 1]) == [1, 2, 3]\n    assert remove_duplicates([]) == []\n"
+    },
+    {
+        "id": 22,
+        "category": "data_structures",
+        "desc": "flatten a nested list of integers into a single flat list",
+        "tests": "def test():\n    assert flatten_list([[1, 2], [3, [4, 5]]]) == [1, 2, 3, 4, 5]\n"
+    },
+    {
+        "id": 23,
+        "category": "data_structures",
+        "desc": "chunk a list into sublists of fixed size n",
+        "tests": "def test():\n    assert chunk_list([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]\n"
+    },
+    {
+        "id": 24,
+        "category": "data_structures",
+        "desc": "rotate a list to the right by k steps",
+        "tests": "def test():\n    assert rotate_list([1, 2, 3, 4, 5], 2) == [4, 5, 1, 2, 3]\n"
+    },
+    {
+        "id": 25,
+        "category": "data_structures",
+        "desc": "find the intersection of two lists with unique elements",
+        "tests": "def test():\n    assert sorted(list_intersection([1, 2, 3], [2, 3, 4])) == [2, 3]\n"
+    },
+    {
+        "id": 26,
+        "category": "data_structures",
+        "desc": "invert a dictionary swapping keys and values",
+        "tests": "def test():\n    assert invert_dict({'a': 1, 'b': 2}) == {1: 'a', 2: 'b'}\n"
+    },
+    {
+        "id": 27,
+        "category": "data_structures",
+        "desc": "merge two dictionaries combining values of shared keys into lists",
+        "tests": "def test():\n    assert merge_dicts_lists({'a': 1}, {'a': 2, 'b': 3}) == {'a': [1, 2], 'b': [3]}\n"
+    },
+    {
+        "id": 28,
+        "category": "data_structures",
+        "desc": "find the second largest unique number in a list",
+        "tests": "def test():\n    assert second_largest([10, 20, 4, 45, 99]) == 45\n    assert second_largest([5, 5]) is None\n"
+    },
+    {
+        "id": 29,
+        "category": "data_structures",
+        "desc": "partition a list into two lists based on a predicate function",
+        "tests": "def test():\n    evens, odds = partition([1, 2, 3, 4], lambda x: x % 2 == 0)\n    assert evens == [2, 4]\n    assert odds == [1, 3]\n"
+    },
+    {
+        "id": 30,
+        "category": "data_structures",
+        "desc": "count frequency of each element in a list returning a dictionary",
+        "tests": "def test():\n    assert frequency_count(['a', 'b', 'a']) == {'a': 2, 'b': 1}\n"
+    },
+
+    # Math & Numeric (31-40)
+    {
+        "id": 31,
+        "category": "math",
+        "desc": "compute the mean average of a list of numbers",
+        "tests": "def test():\n    assert calculate_mean([1, 2, 3, 4, 5]) == 3.0\n"
+    },
+    {
+        "id": 32,
+        "category": "math",
+        "desc": "compute the median value of a list of numbers",
+        "tests": "def test():\n    assert calculate_median([1, 3, 2]) == 2\n    assert calculate_median([1, 2, 3, 4]) == 2.5\n"
+    },
+    {
+        "id": 33,
+        "category": "math",
+        "desc": "check if a number is an armstrong number",
+        "tests": "def test():\n    assert is_armstrong(153) == True\n    assert is_armstrong(123) == False\n"
+    },
+    {
+        "id": 34,
+        "category": "math",
+        "desc": "convert celsius temperature to fahrenheit",
+        "tests": "def test():\n    assert celsius_to_fahrenheit(0) == 32.0\n    assert celsius_to_fahrenheit(100) == 212.0\n"
+    },
+    {
+        "id": 35,
+        "category": "math",
+        "desc": "convert decimal integer to binary string representation",
+        "tests": "def test():\n    assert to_binary_string(10) == '1010'\n    assert to_binary_string(0) == '0'\n"
+    },
+    {
+        "id": 36,
+        "category": "math",
+        "desc": "calculate euclidean distance between two 2d points p1 and p2",
+        "tests": "def test():\n    assert euclidean_distance((0, 0), (3, 4)) == 5.0\n"
+    },
+    {
+        "id": 37,
+        "category": "math",
+        "desc": "generate list of prime numbers up to n using sieve of eratosthenes",
+        "tests": "def test():\n    assert sieve_of_eratosthenes(10) == [2, 3, 5, 7]\n"
+    },
+    {
+        "id": 38,
+        "category": "math",
+        "desc": "find all divisors factors of an integer n",
+        "tests": "def test():\n    assert find_divisors(12) == [1, 2, 3, 4, 6, 12]\n"
+    },
+    {
+        "id": 39,
+        "category": "math",
+        "desc": "calculate the variance of a list of numbers",
+        "tests": "def test():\n    assert calculate_variance([2, 4, 4, 4, 5, 5, 7, 9]) == 4.0\n"
+    },
+    {
+        "id": 40,
+        "category": "math",
+        "desc": "check if an integer n is a perfect square",
+        "tests": "def test():\n    assert is_perfect_square(16) == True\n    assert is_perfect_square(14) == False\n"
+    },
+
+    # Logic & Utilities (41-50)
+    {
+        "id": 41,
+        "category": "utilities",
+        "desc": "clamp a numeric value between minimum and maximum bounds",
+        "tests": "def test():\n    assert clamp(5, 1, 10) == 5\n    assert clamp(-5, 0, 10) == 0\n    assert clamp(15, 0, 10) == 10\n"
+    },
+    {
+        "id": 42,
+        "category": "utilities",
+        "desc": "check if a list of numbers is monotonically increasing",
+        "tests": "def test():\n    assert is_monotonically_increasing([1, 2, 2, 3]) == True\n    assert is_monotonically_increasing([1, 3, 2]) == False\n"
+    },
+    {
+        "id": 43,
+        "category": "utilities",
+        "desc": "evaluate simple postfix reverse polish notation expression",
+        "tests": "def test():\n    assert eval_rpn(['2', '1', '+', '3', '*']) == 9\n"
+    },
+    {
+        "id": 44,
+        "category": "utilities",
+        "desc": "validate if bracket string has balanced parentheses brackets and braces",
+        "tests": "def test():\n    assert is_balanced_brackets('{[()]}') == True\n    assert is_balanced_brackets('{[(])}') == False\n"
+    },
+    {
+        "id": 45,
+        "category": "utilities",
+        "desc": "find missing number in array containing 0 to n",
+        "tests": "def test():\n    assert find_missing_number([3, 0, 1]) == 2\n"
+    },
+    {
+        "id": 46,
+        "category": "utilities",
+        "desc": "transpose a 2d matrix represented as list of lists",
+        "tests": "def test():\n    assert transpose_matrix([[1, 2], [3, 4], [5, 6]]) == [[1, 3, 5], [2, 4, 6]]\n"
+    },
+    {
+        "id": 47,
+        "category": "utilities",
+        "desc": "generate all permutations of a list of integers",
+        "tests": "def test():\n    assert sorted(permutations_list([1, 2])) == [[1, 2], [2, 1]]\n"
+    },
+    {
+        "id": 48,
+        "category": "utilities",
+        "desc": "deep compare two nested dictionaries for equality",
+        "tests": "def test():\n    assert deep_dict_equal({'a': [1, {'b': 2}]}, {'a': [1, {'b': 2}]}) == True\n    assert deep_dict_equal({'a': 1}, {'a': 2}) == False\n"
+    },
+    {
+        "id": 49,
+        "category": "utilities",
+        "desc": "convert integer to roman numeral string",
+        "tests": "def test():\n    assert int_to_roman(1994) == 'MCMXCIV'\n    assert int_to_roman(4) == 'IV'\n"
+    },
+    {
+        "id": 50,
+        "category": "utilities",
+        "desc": "convert roman numeral string to integer",
+        "tests": "def test():\n    assert roman_to_int('MCMXCIV') == 1994\n    assert roman_to_int('LVIII') == 58\n"
+    }
+]
+
+if __name__ == "__main__":
+    with open(BENCHMARK_FILE, "w") as f:
+        json.dump(EVAL_SUITE_50, f, indent=2)
+    print(f"Saved {len(EVAL_SUITE_50)} benchmark problems to {BENCHMARK_FILE}")
