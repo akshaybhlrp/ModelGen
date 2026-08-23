@@ -43,7 +43,12 @@
   - [x] Benchmark Router vs. Grep Baseline across Recall@10, Precision@1, and Latency
   - [x] Router outperforms Grep (+6.00% Recall @ 1.13ms p99)
 
+- [x] **Task 7.5: Phase 0/1 Mutation Testing Quality & Quarantine Gate**
+  - [x] Implemented AST mutation visitor with 5 operators (`BinOp`, `Compare`, `Constant`, `UnaryOp`, `Subscript`) in `mutation_tester.py`
+  - [x] Evaluated test-suite mutant kill-rate and quarantined vacuum tests (12 weak modules quarantined)
+  - [x] Verified active certified library achieved **80.7% average mutation kill rate** (Target: ≥60%)
+
 - [x] **Task 8: Production CLI & Final Test Battery**
   - [x] Build clean CLI tool `cli.py` for querying, composing, and evaluating
-  - [x] Run full automated test battery (`pytest test_battery.py` — 100% PASS)
+  - [x] Run full automated test battery (`pytest test_battery.py` — 12/12 PASS in 1.07s)
   - [x] Commit and push all milestones to GitHub
