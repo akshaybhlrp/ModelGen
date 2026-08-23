@@ -6,10 +6,10 @@ from kernel import init_db, verify
 from eval import run_evaluation
 
 def ast_fingerprint(code: str) -> str:
-    """Computes a normalized AST structural hash ignoring whitespace, variable names, and comments."""
+    """Computes a normalized AST structural hash ignoring whitespace, variable names, function names, and comments."""
     try:
         tree = ast.parse(code)
-        # Strip docstrings and line numbers for structural matching
+        # Strip docstrings, line numbers, variable/function names for structural matching
         for node in ast.walk(tree):
             if hasattr(node, 'lineno'):
                 node.lineno = 0
@@ -17,6 +17,12 @@ def ast_fingerprint(code: str) -> str:
                 node.col_offset = 0
             if hasattr(node, 'ctx'):
                 node.ctx = ast.Load()
+            if isinstance(node, ast.FunctionDef):
+                node.name = "_canonical_fn"
+            elif isinstance(node, ast.arg):
+                node.arg = "_arg"
+            elif isinstance(node, ast.Name):
+                node.id = "_var"
         return hashlib.sha256(ast.dump(tree).encode()).hexdigest()
     except Exception:
         return hashlib.sha256(code.encode()).hexdigest()

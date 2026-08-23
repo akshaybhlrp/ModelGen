@@ -99,6 +99,8 @@ def store(conn, name: str, source: str, tests: str, license_type: str, url: str,
                (content_hash, name, source_code, test_code, input_schema, output_schema, license, source_url, compile_status) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ok')""",
             (h, name, source, tests, input_schema, output_schema, license_type, url))
+        if cur.rowcount == 0:
+            return 0  # Duplicate ignored
         mid = cur.lastrowid
         if mid:
             sh = compute_simhash(source)

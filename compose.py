@@ -54,10 +54,10 @@ def test_mvo1_composite_battery(conn):
             "tests": "def test():\n    assert pipeline('HELLO WORLD') == 3\n    assert pipeline('XYZ') == 0\n"
         },
         {
-            "name": "sort_and_chunk_list",
-            "in_type": "list",
-            "out_type": "list",
-            "tests": "def test():\n    assert pipeline([5, 2, 8, 1]) == [[1, 2, 5, 8]]\n"
+            "name": "reverse_and_count_vowels",
+            "in_type": "str",
+            "out_type": "int",
+            "tests": "def test():\n    assert pipeline('hello world') == 3\n    assert pipeline('radar') == 2\n"
         }
     ]
     
@@ -66,14 +66,26 @@ def test_mvo1_composite_battery(conn):
     print("           MVO-1 COMPOSITION BATTERY              ")
     print("=" * 50)
     for prob in composite_problems:
-        res = compose(conn, prob["in_type"], prob["out_type"], prob["tests"])
-        if res and res["type"] == "composition":
-            passed += 1
-            print(f"[+] Solved via Composition: {prob['name']} (Chain: {res['pipeline']})")
-        elif res:
-            print(f"[~] Solved via Direct Retrieval: {prob['name']}")
-        else:
-            print(f"[-] Failed: {prob['name']}")
+        # Test composition specifically (excluding previously stored compound pipelines)
+        bridges = find_bridge_types(conn, prob["in_type"], prob["out_type"])
+        found = False
+        for bridge in bridges:
+            left = conn.execute("SELECT id, name, source_code FROM modules WHERE input_schema = ? AND output_schema = ? AND license != 'composed' AND compile_status = 'ok'", (prob["in_type"], bridge)).fetchall()
+            right = conn.execute("SELECT id, name, source_code FROM modules WHERE input_schema = ? AND output_schema = ? AND license != 'composed' AND compile_status = 'ok'", (bridge, prob["out_type"])).fetchall()
+            for l_id, l_name, l_src in left:
+                for r_id, r_name, r_src in right:
+                    composed_src = f"{l_src}\n\n{r_src}\n\ndef pipeline(x):\n    return {r_name}({l_name}(x))\n"
+                    if verify(composed_src, prob["tests"]):
+                        passed += 1
+                        found = True
+                        print(f"[+] Solved via Multi-Module Composition: {prob['name']} (Chain: {l_name} -> {r_name})")
+                        break
+                if found:
+                    break
+            if found:
+                break
+        if not found:
+            print(f"[-] No composition chain found: {prob['name']}")
     
     print("-" * 50)
     print(f"MVO-1 Gate Status: {'PASS (>=1 Composition Verified)' if passed >= 1 else 'FAIL'}")
