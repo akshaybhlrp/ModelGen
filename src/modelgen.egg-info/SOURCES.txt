@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+src/modelgen.egg-info/PKG-INFO
+src/modelgen.egg-info/SOURCES.txt
+src/modelgen.egg-info/dependency_links.txt
+src/modelgen.egg-info/entry_points.txt
+src/modelgen.egg-info/requires.txt
+src/modelgen.egg-info/top_level.txt

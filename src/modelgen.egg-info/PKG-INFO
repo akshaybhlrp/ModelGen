@@ -1,0 +1,106 @@
+Metadata-Version: 2.4
+Name: modelgen
+Version: 22.0.0
+Summary: Laptop Frontier: Local Verifier-Gated Skill Library & Program Synthesis Engine
+Author: Akshay Bhalerao
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.0.0
+Requires-Dist: requests>=2.28.0
+Requires-Dist: pytest>=7.0.0
+
+# ModelGen (Laptop Frontier v22)
+
+**Local-First, Content-Addressed, Verifier-Gated Skill Library & Program Synthesis Engine.**
+
+ModelGen is an on-device code synthesis engine running entirely on a standard laptop (no datacenters, no cloud APIs). It organizes, mutation-tests, decontaminates, and synthesizes Python algorithms with sub-millisecond query latency.
+
+---
+
+## Key Capabilities
+
+- **Sub-Millisecond Query Latency**: **0.06ms** P99 query latency via SQLite WAL and 64-bit signed SimHash LSH index.
+- **Learned Neural Router**: Lightweight **160K parameter (<1MB)** InfoNCE contrastive neural embedding model.
+- **100% Held-Out Recall**: Solves **50/50 held-out benchmark problems** across 5 categories (Algorithms, Strings, Data Structures, Math, Utilities).
+- **Multi-Module Program Synthesis**:
+  - Linear $A \to B$ Type-Bridge Composition (`compose.py`)
+  - Multi-Branch Join Non-Linear DAG Synthesis (`dag_composer.py`)
+- **Quality & Security Gates**:
+  - **Mutation Testing Quality Gate**: AST mutation testing achieving **80.7% active mutant kill-rate**.
+  - **Split-Policy Decontamination Filter**: Zero benchmark test assertion leakage.
+  - **Decentralized P2P Federation**: Beta-Bernoulli peer trust estimation with automated quarantine for malicious nodes.
+  - **AST Redundancy Pruning & MDL Compression**: Automated dead code elimination and zero-forgetting regression verification.
+- **LMStudio-Style Dark-Themed GUI**: Real-time browser studio with live sandbox execution badges.
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/akshaybhlrp/ModelGen.git
+cd ModelGen
+pip install -e .
+```
+
+---
+
+## Quickstart
+
+### 1. Launch Studio GUI (LMStudio-Style Web Interface)
+```bash
+modelgen-gui
+```
+Open **[http://localhost:8080](http://localhost:8080)** in your browser.
+
+### 2. Natural Language Query (CLI)
+```bash
+modelgen query "binary search integer in list" -v
+modelgen query "check if string is palindrome" -v
+```
+
+### 3. Multi-Module Composition Pipeline
+```bash
+modelgen compose --in-type str --out-type int --test-code "def test(): assert pipeline('HELLO WORLD') == 3"
+```
+
+### 4. Run Benchmark Suite & Self-Learning Loop
+```bash
+python3 eval.py
+python3 self_learning_progress.py
+```
+
+### 5. Run Full Test Battery
+```bash
+pytest test_battery.py -v
+```
+
+---
+
+## Project Structure
+
+```
+ModelGen/
+├── kernel.py                  # Core SQLite WAL storage, SimHash LSH, and subprocess sandbox
+├── learned_router.py          # InfoNCE contrastive neural router (<1MB weights)
+├── compose.py                 # Linear A -> B type-bridge composition engine
+├── dag_composer.py            # Non-linear multi-branch DAG program synthesis
+├── tuner.py                   # Bounded template parameter search engine
+├── mutation_tester.py         # AST mutation testing & weak-test quarantine gate
+├── decontaminate.py           # Split-policy benchmark leak prevention filter
+├── compress_mdl.py            # Phase 2 MDL compression and minification
+├── federation.py              # Phase 4 P2P federation and Beta-Bernoulli peer trust
+├── pruner.py                  # AST semantic deduplication & forgetting gate
+├── eval.py                    # 50-problem held-out benchmark evaluation harness
+├── self_learning_progress.py  # 5-step autonomous self-learning progress loop
+├── cli.py                     # Command-line interface tool
+├── app_gui.py                 # Studio GUI backend server
+├── web/index.html             # Studio dark-mode frontend GUI
+├── test_battery.py            # Complete 16-test unit & integration battery
+└── benchmarks_50.json         # 50 canonical held-out benchmark problems
+```
+
+---
+
+## License
+MIT License.

@@ -1,0 +1,3 @@
+[console_scripts]
+modelgen = cli:main
+modelgen-gui = app_gui:run_server

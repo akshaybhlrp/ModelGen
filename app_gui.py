@@ -11,10 +11,13 @@ from kernel import init_db, retrieve, verify
 from compose import compose
 from dag_composer import synthesize_dag_pipeline
 
+from conversational_bridge import ConversationalBridge
+
 PORT = 8080
 WEB_DIR = Path(__file__).parent / "web"
 
 conn = init_db()
+bridge = ConversationalBridge(conn)
 
 class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -48,20 +51,6 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             prompt = payload.get("prompt", "").strip()
             mode = payload.get("mode", "query")
 
-            # Check conversational / greeting inputs
-            greetings = {"hello", "hi", "hey", "hola", "help", "who are you", "what can you do"}
-            if prompt.lower() in greetings:
-                response_data = {
-                    "is_conversational": True,
-                    "message": "Hello! I am ModelGen — your local, verifier-gated code synthesis engine. I synthesize and verify algorithmic solutions on-device with zero cloud dependencies. Try asking for an algorithm like 'binary search', 'check anagram', or switch modes below for multi-module composition!",
-                    "latency_ms": 0.05
-                }
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps(response_data).encode())
-                return
-
             t0 = time.time()
             if mode == "compose":
                 res = compose(conn, "str", "int", "def test(): assert pipeline('HELLO') == 2")
@@ -72,21 +61,25 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
                 latency = (time.time() - t0) * 1000
                 response_data = {"composition": res, "latency_ms": round(latency, 2)}
             else:
-                cands = retrieve(conn, prompt, k=5)
+                conv_res = bridge.process_message(prompt)
                 latency = (time.time() - t0) * 1000
-                results = []
-                for mid, score in cands:
-                    row = conn.execute("SELECT name, source_code, input_schema, output_schema FROM modules WHERE id = ?", (mid,)).fetchone()
-                    if row:
-                        results.append({
-                            "id": mid,
-                            "name": row[0],
-                            "source_code": row[1],
-                            "input_schema": row[2],
-                            "output_schema": row[3],
-                            "score": score
-                        })
-                response_data = {"results": results, "latency_ms": round(latency, 2)}
+                if conv_res["type"] == "chat":
+                    response_data = {
+                        "is_conversational": True,
+                        "message": conv_res["message"],
+                        "latency_ms": round(latency, 2)
+                    }
+                else:
+                    response_data = {
+                        "is_conversational": True,
+                        "message": conv_res["message"],
+                        "results": [{
+                            "name": conv_res.get("name", "Verified Solution"),
+                            "source_code": conv_res["code"],
+                            "score": 100
+                        }],
+                        "latency_ms": round(latency, 2)
+                    }
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
