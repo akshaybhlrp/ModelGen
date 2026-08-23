@@ -112,23 +112,39 @@ def store(conn, name: str, source: str, tests: str, license_type: str, url: str,
 def retrieve(conn, query: str, k: int = 10):
     qh = input_hash(query)
     # Tier 1: Exact counter routing
-    rows = conn.execute(
-        "SELECT module_id, counter FROM routing_counters WHERE input_hash = ? ORDER BY counter DESC LIMIT ?",
+    exact = conn.execute(
+        "SELECT module_id, counter FROM routing_counters WHERE input_hash = ? AND counter > 0 ORDER BY counter DESC LIMIT ?",
         (qh, k)).fetchall()
-    if rows:
-        return rows
-    # Tier 2: SimHash LSH nearest neighbor
+    if exact:
+        return exact
+
+    # Tier 2: Hybrid TF-IDF Keyword Matching + SimHash LSH Nearest Neighbor
+    q_tokens = set(normalize(query).split())
     q_sh = compute_simhash(query)
-    all_mods = conn.execute("SELECT module_id, simhash FROM simhash_index").fetchall()
+    
+    all_mods = conn.execute("SELECT id, name, source_code, input_schema, output_schema FROM modules WHERE compile_status = 'ok'").fetchall()
+    sim_dict = dict(conn.execute("SELECT module_id, simhash FROM simhash_index").fetchall())
+    
     scored = []
-    for mid, sh in all_mods:
-        dist = bin(q_sh ^ sh).count('1')
-        scored.append((mid, max(0, 64 - dist)))
+    for mid, name, src, in_s, out_s in all_mods:
+        # Lexical score from name, docstring, and code tokens
+        name_tokens = set(normalize(name).replace('_', ' ').split())
+        code_tokens = set(normalize(src).replace('_', ' ').split())
+        
+        name_overlap = len(q_tokens & name_tokens)
+        code_overlap = len(q_tokens & code_tokens)
+        
+        # SimHash hamming proximity (0 to 64)
+        sh = sim_dict.get(mid, 0)
+        dist = bin((q_sh ^ sh) & 0xFFFFFFFFFFFFFFFF).count('1')
+        sim_score = max(0, 64 - dist)
+        
+        # Composite score
+        total_score = (name_overlap * 20.0) + (code_overlap * 2.0) + (sim_score * 0.1)
+        scored.append((mid, total_score))
+        
     scored.sort(key=lambda x: x[1], reverse=True)
-    if scored and scored[0][1] > 0:
-        return scored[:k]
-    # Tier 3: Recent compiled modules fallback
-    return conn.execute("SELECT id, 0 FROM modules WHERE compile_status = 'ok' ORDER BY fetched_at DESC LIMIT ?", (k,)).fetchall()
+    return [(mid, int(score)) for mid, score in scored[:k]]
 
 def update_counter(conn, ih: bytes, mid: int, success: bool):
     d = 1 if success else -1

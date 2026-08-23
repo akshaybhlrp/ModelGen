@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import sqlite3
-from kernel import init_db, verify
+from kernel import init_db, verify, store
 
 def find_bridge_types(conn, in_type: str, out_type: str):
     """Finds intermediate types T_mid connecting T_in -> T_mid -> T_out."""
@@ -14,7 +14,7 @@ def find_bridge_types(conn, in_type: str, out_type: str):
     rows = conn.execute(q, (in_type, out_type)).fetchall()
     return [r[0] for r in rows]
 
-def compose(conn, in_type: str, out_type: str, tests: str):
+def compose(conn, in_type: str, out_type: str, tests: str, store_on_success: bool = True):
     """Attempts direct single-module retrieval first, then linear A -> B composition."""
     # 1. Direct retrieval
     direct = conn.execute(
@@ -27,19 +27,59 @@ def compose(conn, in_type: str, out_type: str, tests: str):
     # 2. Linear Composition A -> B
     bridges = find_bridge_types(conn, in_type, out_type)
     for bridge in bridges:
-        left = conn.execute("SELECT id, name, source_code FROM modules WHERE input_schema = ? AND output_schema = ?", (in_type, bridge)).fetchall()
-        right = conn.execute("SELECT id, name, source_code FROM modules WHERE input_schema = ? AND output_schema = ?", (bridge, out_type)).fetchall()
+        left = conn.execute("SELECT id, name, source_code FROM modules WHERE input_schema = ? AND output_schema = ? AND compile_status = 'ok'", (in_type, bridge)).fetchall()
+        right = conn.execute("SELECT id, name, source_code FROM modules WHERE input_schema = ? AND output_schema = ? AND compile_status = 'ok'", (bridge, out_type)).fetchall()
         for l_id, l_name, l_src in left:
             for r_id, r_name, r_src in right:
                 composed_src = f"{l_src}\n\n{r_src}\n\ndef pipeline(x):\n    return {r_name}({l_name}(x))\n"
                 if verify(composed_src, tests):
+                    comp_name = f"pipeline_{l_name}_{r_name}"
+                    if store_on_success:
+                        store(conn, comp_name, composed_src, tests, f"composed:{l_name}:{r_name}", "local_composition", in_type, out_type)
                     return {
                         "type": "composition",
                         "pipeline": [l_name, r_name],
+                        "name": comp_name,
                         "code": composed_src
                     }
     return None
 
+def test_mvo1_composite_battery(conn):
+    """Evaluates multi-module composition across held-out composite benchmarks."""
+    composite_problems = [
+        {
+            "name": "lowercase_and_count_vowels",
+            "in_type": "str",
+            "out_type": "int",
+            "tests": "def test():\n    assert pipeline('HELLO WORLD') == 3\n    assert pipeline('XYZ') == 0\n"
+        },
+        {
+            "name": "sort_and_chunk_list",
+            "in_type": "list",
+            "out_type": "list",
+            "tests": "def test():\n    assert pipeline([5, 2, 8, 1]) == [[1, 2, 5, 8]]\n"
+        }
+    ]
+    
+    passed = 0
+    print("\n" + "=" * 50)
+    print("           MVO-1 COMPOSITION BATTERY              ")
+    print("=" * 50)
+    for prob in composite_problems:
+        res = compose(conn, prob["in_type"], prob["out_type"], prob["tests"])
+        if res and res["type"] == "composition":
+            passed += 1
+            print(f"[+] Solved via Composition: {prob['name']} (Chain: {res['pipeline']})")
+        elif res:
+            print(f"[~] Solved via Direct Retrieval: {prob['name']}")
+        else:
+            print(f"[-] Failed: {prob['name']}")
+    
+    print("-" * 50)
+    print(f"MVO-1 Gate Status: {'PASS (>=1 Composition Verified)' if passed >= 1 else 'FAIL'}")
+    print("=" * 50)
+    return passed
+
 if __name__ == "__main__":
     conn = init_db()
-    print("Composition engine ready.")
+    test_mvo1_composite_battery(conn)
