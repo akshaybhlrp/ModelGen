@@ -119,18 +119,24 @@ class ConversationalEngine:
         return train_conversational_model()
 
     def predict_intent(self, text: str) -> str:
-        tokens_raw = tokenize(text)
-        if not tokens_raw:
-            return "GREETING"
-            
         low = text.lower().strip()
-        # Direct exact greetings
-        if low in {"hi", "hello", "hey", "hola", "greetings", "good morning", "good evening", "hi modelgen", "hello modelgen"}:
+        
+        # 1. Direct exact greetings ONLY
+        exact_greetings = {"hi", "hello", "hey", "hola", "greetings", "good morning", "good evening", "hi modelgen", "hello modelgen", "yo", "sup"}
+        if low in exact_greetings:
             return "GREETING"
         if any(p in low for p in ["who are you", "what are you", "what can you do", "help", "how do you work"]):
             return "IDENTITY_META"
         if low in {"thanks", "thank you", "cool", "awesome", "bye", "goodbye"}:
             return "CASUAL_CHAT"
+            
+        # 2. Mathematical expression detection (e.g. 5*6, (2+3)*4, 10/2)
+        if re.match(r"^[\d\s\+\-\*\/\%\(\)\.\^\*\*]+$", low) and any(op in low for op in "+-*/%^"):
+            return "MATH_CALC"
+
+        tokens_raw = tokenize(text)
+        if not tokens_raw:
+            return "GREETING"
             
         tokens = [self.vocab.get(w, self.vocab["<unk>"]) for w in tokens_raw]
         inp = torch.tensor([tokens], dtype=torch.long)
@@ -138,11 +144,7 @@ class ConversationalEngine:
             logits = self.model(inp)
             pred = torch.argmax(logits, dim=1).item()
         
-        # If model predicted greeting on a long complex sentence with novel words, default to GENERAL_QUERY
-        res = INTENT_LABELS.get(pred, "CODE_SYNTHESIS")
-        if res == "GREETING" and len(tokens_raw) > 3:
-            return "CODE_SYNTHESIS"
-        return res
+        return INTENT_LABELS.get(pred, "CODE_SYNTHESIS")
 
     def adapt_on_the_fly(self, text: str, label_id: int):
         """Performs immediate online gradient descent to update neural weights on-the-fly."""
@@ -222,6 +224,19 @@ class ConversationalEngine:
                 "message": "You're welcome! Let me know if you need any other algorithms, data structures, or code pipelines.",
                 "code": None
             }
+
+        elif intent == "MATH_CALC":
+            try:
+                # Safe mathematical evaluation
+                val = eval(clean, {"__builtins__": {}}, {})
+                return {
+                    "type": "chat",
+                    "is_conversational": True,
+                    "message": f"**{clean}** = `{val}`",
+                    "code": None
+                }
+            except Exception:
+                pass
 
         elif intent == "COMPOSITION":
             res = compose(self.conn, "str", "int", "def test(): assert pipeline('HELLO WORLD') == 3\nassert pipeline('xyz') == 0\n")
