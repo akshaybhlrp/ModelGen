@@ -48,6 +48,11 @@
   - [x] Evaluated test-suite mutant kill-rate and quarantined vacuum tests (12 weak modules quarantined)
   - [x] Verified active certified library achieved **80.7% average mutation kill rate** (Target: ≥60%)
 
+- [x] **Task 7.6: Phase 0/1 Split-Policy Decontamination Gate**
+  - [x] Implemented 3-tier Bloom filter and exact assertion scanner in `decontaminate.py`
+  - [x] Enforced split policy separating internal reference benchmarks from external internet harvests
+  - [x] Verified 100% decontamination clearance across all active library modules
+
 - [x] **Task 8: Production CLI & Final Test Battery**
   - [x] Build clean CLI tool `cli.py` for querying, composing, and evaluating
   - [x] Run full automated test battery (`pytest test_battery.py` — 12/12 PASS in 1.07s)
