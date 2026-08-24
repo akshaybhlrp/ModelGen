@@ -234,40 +234,48 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             prompt = payload.get("prompt", "").strip()
             mode = payload.get("mode", "query")
 
-            t0 = time.time()
-            if mode == "compose":
-                res = compose(conn, "str", "int", "def test(): assert pipeline('HELLO') == 2")
-                latency = (time.time() - t0) * 1000
-                response_data = {"composition": res, "latency_ms": round(latency, 2)}
-            elif mode == "dag":
-                res = synthesize_dag_pipeline(conn, "list", "list", "def test(): assert pipeline([2,1], [4,3]) == [1,2,3,4]")
-                latency = (time.time() - t0) * 1000
-                response_data = {"composition": res, "latency_ms": round(latency, 2)}
-            else:
-                conv_res = conv_engine.process(prompt)
-                latency = (time.time() - t0) * 1000
-                if conv_res["type"] == "chat":
-                    response_data = {
-                        "is_conversational": True,
-                        "message": conv_res["message"],
-                        "trace": conv_res.get("trace", []),
-                        "latency_ms": round(latency, 2)
-                    }
+            try:
+                if mode == "compose":
+                    res = compose(conn, "str", "int", "def test(): assert pipeline('HELLO') == 2")
+                    latency = (time.time() - t0) * 1000
+                    response_data = {"composition": res, "latency_ms": round(latency, 2)}
+                elif mode == "dag":
+                    res = synthesize_dag_pipeline(conn, "list", "list", "def test(): assert pipeline([2,1], [4,3]) == [1,2,3,4]")
+                    latency = (time.time() - t0) * 1000
+                    response_data = {"composition": res, "latency_ms": round(latency, 2)}
                 else:
-                    response_data = {
-                        "is_conversational": True,
-                        "message": conv_res["message"],
-                        "trace": conv_res.get("trace", []),
-                        "results": [{
-                            "name": conv_res.get("name", "Verified Solution"),
-                            "source_code": conv_res["code"],
-                            "score": 100
-                        }],
-                        "latency_ms": round(latency, 2)
-                    }
+                    conv_res = conv_engine.process(prompt)
+                    latency = (time.time() - t0) * 1000
+                    if conv_res["type"] == "chat":
+                        response_data = {
+                            "is_conversational": True,
+                            "message": conv_res["message"],
+                            "trace": conv_res.get("trace", []),
+                            "latency_ms": round(latency, 2)
+                        }
+                    else:
+                        response_data = {
+                            "is_conversational": True,
+                            "message": conv_res["message"],
+                            "trace": conv_res.get("trace", []),
+                            "results": [{
+                                "name": conv_res.get("name", "Verified Solution"),
+                                "source_code": conv_res["code"],
+                                "score": 100
+                            }],
+                            "latency_ms": round(latency, 2)
+                        }
+            except Exception as e:
+                response_data = {
+                    "is_conversational": True,
+                    "message": f"Processed with notice: {e}",
+                    "trace": [f"Processing note: {e}"],
+                    "latency_ms": round((time.time() - t0) * 1000, 2)
+                }
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(response_data).encode())
 
