@@ -207,6 +207,7 @@ class ConversationalEngine:
             candidate_path = clean_path
 
         expanded = Path(os.path.expanduser(candidate_path))
+        # Handle Directory Scanning
         if (candidate_path.startswith("/") or candidate_path.startswith("./") or candidate_path.startswith("~") or candidate_path.startswith("../")) and expanded.is_dir():
             from local_learner import ingest_local_directory
             res = ingest_local_directory(str(expanded), conn=self.conn)
@@ -236,6 +237,60 @@ class ConversationalEngine:
                 )
             else:
                 msg = f"Failed to ingest directory `{expanded}`: {res['message']}"
+            return {
+                "type": "chat",
+                "is_conversational": True,
+                "message": msg,
+                "code": None
+            }
+
+        # Handle Single File Analysis
+        if (candidate_path.startswith("/") or candidate_path.startswith("./") or candidate_path.startswith("~") or candidate_path.startswith("../")) and expanded.is_file():
+            from local_learner import process_media_file, process_archive_file, SUPPORTED_CODE_EXTS, SUPPORTED_ARCHIVE_EXTS
+            from kernel import store
+            from harvester import extract_ast
+            from mutation_tester import evaluate_mutation_score
+
+            ext = expanded.suffix.lower()
+            size_kb = round(expanded.stat().st_size / 1024, 2)
+            learned_items = []
+            analysis_summary = ""
+
+            if ext in SUPPORTED_CODE_EXTS:
+                content = expanded.read_text(encoding="utf-8", errors="ignore")
+                extracted = extract_ast(content)
+                for fn_name, fn_code, test_code in extracted:
+                    mut_score, _, _ = evaluate_mutation_score(fn_code, test_code, max_mutants=5)
+                    if mut_score >= 0.40:
+                        mid = store(self.conn, fn_name, fn_code, test_code, "LocalFile", f"local:{expanded}")
+                        if mid:
+                            learned_items.append(fn_name)
+                func_list = ", ".join(f"`{fn}`" for fn, _, _ in extracted) if extracted else "No top-level functions"
+                analysis_summary = f"• **Language**: Python (`{ext}`)\n• **Detected Functions/Classes**: {func_list}\n• **Lines of Code**: {len(content.splitlines())} lines"
+            elif any(expanded.name.lower().endswith(a_ext) for a_ext in SUPPORTED_ARCHIVE_EXTS):
+                learned_cnt = process_archive_file(expanded, self.conn)
+                analysis_summary = f"• **Archive Type**: Compressed `{ext}`\n• **Extracted & Ingested**: {learned_cnt} verified assets"
+            else:
+                items = process_media_file(expanded, self.conn)
+                for m_name, m_code, m_test in items:
+                    mid = store(self.conn, m_name, m_code, m_test, "LocalMedia", f"local:{expanded}")
+                    if mid:
+                        learned_items.append(m_name)
+                analysis_summary = f"• **Format Category**: `{ext.upper() or 'RAW'}` Asset\n• **File Size**: {size_kb} KB\n• **Indexed Items**: {len(items)} nodes"
+
+            learned_str = ", ".join(f"`{x}`" for x in learned_items) if learned_items else "Clean / Indexed"
+            msg = (
+                f"### File Analysis & Ingestion: `{expanded.name}`\n\n"
+                f"**File Details:**\n"
+                f"{analysis_summary}\n\n"
+                f"**Learned & Embedded into Weights:**\n"
+                f"{learned_str}\n\n"
+                f"---\n"
+                f"**What would you like me to do with this file?**\n"
+                f"1. **Explain** what this file does step-by-step.\n"
+                f"2. **Refactor or optimize** the code/content.\n"
+                f"3. **Write unit tests** or generate integration examples."
+            )
             return {
                 "type": "chat",
                 "is_conversational": True,
