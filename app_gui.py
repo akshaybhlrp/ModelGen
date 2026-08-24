@@ -233,6 +233,7 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length).decode())
             prompt = payload.get("prompt", "").strip()
             mode = payload.get("mode", "query")
+            t0 = time.time()
 
             try:
                 if mode == "compose":
