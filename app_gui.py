@@ -81,11 +81,80 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"total": len(modules), "modules": modules}).encode())
+        elif self.path == "/v1/models":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "object": "list",
+                "data": [
+                    {
+                        "id": "modelgen-frontier",
+                        "object": "model",
+                        "created": int(time.time()),
+                        "owned_by": "modelgen",
+                        "permission": []
+                    }
+                ]
+            }).encode())
         else:
             super().do_GET()
 
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+
     def do_POST(self):
-        if self.path == "/api/query":
+        if self.path == "/v1/chat/completions":
+            length = int(self.headers.get('Content-Length', 0))
+            payload = json.loads(self.rfile.read(length).decode())
+            messages = payload.get("messages", [])
+            prompt = messages[-1]["content"] if messages else ""
+            
+            conv_res = conv_engine.process(prompt)
+            reply_text = ""
+            if conv_res["type"] == "chat":
+                reply_text = conv_res["message"]
+            else:
+                code_snippet = conv_res.get("code", "")
+                tests = conv_res.get("tests", "")
+                msg = conv_res.get("message", "Here is the verified implementation:")
+                reply_text = f"{msg}\n\n```python\n{code_snippet}\n```"
+                if tests:
+                    reply_text += f"\n\n**Test Suite:**\n```python\n{tests}\n```"
+
+            resp_payload = {
+                "id": f"chatcmpl-{int(time.time()*1000)}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": "modelgen-frontier",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": reply_text
+                        },
+                        "finish_reason": "stop"
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": len(prompt.split()),
+                    "completion_tokens": len(reply_text.split()),
+                    "total_tokens": len(prompt.split()) + len(reply_text.split())
+                }
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(resp_payload).encode())
+
+        elif self.path == "/api/query":
             length = int(self.headers.get('Content-Length', 0))
             payload = json.loads(self.rfile.read(length).decode())
             prompt = payload.get("prompt", "").strip()
