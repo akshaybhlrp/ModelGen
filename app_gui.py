@@ -13,7 +13,9 @@ from dag_composer import synthesize_dag_pipeline
 
 from conversational_learner import ConversationalEngine
 
-PORT = 8080
+import os
+
+PORT = int(os.environ.get("MODELGEN_PORT", 8085))
 WEB_DIR = Path(__file__).parent / "web"
 
 conn = init_db()
@@ -81,6 +83,16 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"total": len(modules), "modules": modules}).encode())
+        elif self.path == "/lmstudio-greeting" or self.path == "/v1":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "ok",
+                "message": "ModelGen Frontier Server Ready",
+                "version": "v22"
+            }).encode())
         elif self.path == "/v1/models":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
