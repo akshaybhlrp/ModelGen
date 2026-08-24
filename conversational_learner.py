@@ -10,6 +10,7 @@ A trainable intent classification and conversational response generator that lea
 
 The dialogue model self-trains alongside the neural router and updates dynamic conversational response policies.
 """
+import os
 import re
 import sqlite3
 import torch
@@ -196,16 +197,24 @@ class ConversationalEngine:
     def process(self, text: str) -> dict:
         clean = text.strip()
         
-        # 0. Check if user provided a local directory path (e.g. /path/to/project or ./src)
+        # 0. Check if user provided a local directory path (e.g. /path/to/project, ./src, "scan /my/dir", "learn from ./src")
         clean_path = clean.strip("\"' \t\n")
-        if (clean_path.startswith("/") or clean_path.startswith("./") or clean_path.startswith("~")) and Path(os.path.expanduser(clean_path)).is_dir():
+        # Extract path from phrases like "scan /path/to/folder" or "ingest ./my_code"
+        path_match = re.search(r"(?:scan|ingest|learn from|index|parse|read dir)\s+([~/./\w\-_\\/]+)", clean, re.IGNORECASE)
+        if path_match:
+            candidate_path = path_match.group(1).strip("\"' ")
+        else:
+            candidate_path = clean_path
+
+        expanded = Path(os.path.expanduser(candidate_path))
+        if (candidate_path.startswith("/") or candidate_path.startswith("./") or candidate_path.startswith("~") or candidate_path.startswith("../")) and expanded.is_dir():
             from local_learner import ingest_local_directory
-            res = ingest_local_directory(clean_path, conn=self.conn)
+            res = ingest_local_directory(str(expanded), conn=self.conn)
             if res["status"] == "success":
                 mod_names = ", ".join(f"`{m}`" for m in res["modules"][:5])
-                msg = f"Successfully scanned **{res['scanned_files']} Python files** from `{clean_path}`.\n\n• **Learned & Verified**: {res['learned_count']} new algorithms ({mod_names}{'...' if len(res['modules'])>5 else ''}).\n• **Neural Weights Updated**: InfoNCE embeddings retrained on-the-fly with new local code tokens."
+                msg = f"Successfully scanned **{res['scanned_files']} Python files** from `{expanded}`.\n\n• **Learned & Verified**: {res['learned_count']} new algorithms ({mod_names}{'...' if len(res['modules'])>5 else ''}).\n• **Neural Weights Retrained**: InfoNCE embeddings updated on-the-fly with new local code tokens."
             else:
-                msg = f"Failed to ingest directory `{clean_path}`: {res['message']}"
+                msg = f"Failed to ingest directory `{expanded}`: {res['message']}"
             return {
                 "type": "chat",
                 "is_conversational": True,
