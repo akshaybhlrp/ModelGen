@@ -560,8 +560,9 @@
                 responseDiv.innerHTML = contentHtml;
             } catch (err) {
                 const responseDiv = modelRow.querySelector('.message-content');
-                responseDiv.innerHTML = `<p style="color: #f28b82;">Error communicating with ModelGen: ${err}</p>`;
-                updateSidebarError(err);
+                const safeErr = escapeHtml(String(err));
+                responseDiv.innerHTML = `<p style="color: #f28b82;">Error communicating with ModelGen: ${safeErr}</p>`;
+                updateSidebarError(safeErr);
             }
             container.scrollTop = container.scrollHeight;
         }

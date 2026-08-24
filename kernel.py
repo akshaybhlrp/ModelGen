@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import ast
 import hashlib
 import json
@@ -72,6 +73,24 @@ def compute_simhash(text: str) -> int:
     return fingerprint
 
 def verify(source: str, tests: str, timeout: float = 2.0) -> bool:
+    # SEC-10: AST validation on source and tests to block blatant malicious syscalls
+    try:
+        source_tree = ast.parse(source)
+        test_tree = ast.parse(tests)
+        # Scan for dangerous modules in imports
+        DISALLOWED_MODULES = {"socket", "requests", "urllib", "http", "ftplib", "subprocess", "ctypes"}
+        for tree in (source_tree, test_tree):
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name.split('.')[0] in DISALLOWED_MODULES:
+                            return False
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module and node.module.split('.')[0] in DISALLOWED_MODULES:
+                        return False
+    except Exception:
+        return False
+
     with tempfile.TemporaryDirectory() as tmpdir:
         p = Path(tmpdir) / "test_run.py"
         test_wrapper = (
@@ -82,9 +101,36 @@ def verify(source: str, tests: str, timeout: float = 2.0) -> bool:
             "            v()\n"
         )
         p.write_text(test_wrapper)
+        
+        # SEC-01: Set minimal clean environment and resource limits
+        clean_env = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "PYTHONPATH": "",
+            "PYTHONDONTWRITEBYTECODE": "1"
+        }
+
+        def set_sandbox_limits():
+            try:
+                import resource
+                # 256 MB memory cap
+                resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
+                # 2 CPU seconds limit
+                resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+                # No core dumps
+                resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+            except Exception:
+                pass
+
         try:
-            r = subprocess.run([sys.executable, str(p)],
-                               capture_output=True, timeout=timeout, text=True)
+            r = subprocess.run(
+                [sys.executable, "-B", str(p)],
+                capture_output=True,
+                timeout=timeout,
+                text=True,
+                cwd=tmpdir,
+                env=clean_env,
+                preexec_fn=set_sandbox_limits if sys.platform != "win32" else None
+            )
             return r.returncode == 0
         except Exception:
             return False
@@ -103,8 +149,11 @@ def store(conn, name: str, source: str, tests: str, license_type: str, url: str,
             return 0  # Duplicate ignored
         mid = cur.lastrowid
         if mid:
-            sh = compute_simhash(source)
-            conn.execute("INSERT OR REPLACE INTO simhash_index (module_id, simhash) VALUES (?, ?)", (mid, sh))
+            try:
+                sh = compute_simhash(source)
+                conn.execute("INSERT OR REPLACE INTO simhash_index (module_id, simhash) VALUES (?, ?)", (mid, sh))
+            except Exception:
+                pass
             conn.commit()
             return mid
     except sqlite3.Error:

@@ -17,7 +17,7 @@ from decontaminate import DecontaminationGate
 from learned_router import train_learned_router
 
 GATEWAY_URL = os.environ.get("ROUTER_URL", "http://localhost:20128/v1")
-API_KEY = os.environ.get("ROUTER_API_KEY", "sk-ef6bda77bfc03030-iheqrc-5ded8f96")
+API_KEY = os.environ.get("ROUTER_API_KEY", "")
 
 HEADERS = {
     "x-api-key": API_KEY,
@@ -177,11 +177,15 @@ class NineRouterDistiller:
 
         # Quality Gate 2: Sandbox Verification + Mutation Kill-rate
         mut_score, killed, total = evaluate_mutation_score(fn_code, test_code, max_mutants=5)
+        if mut_score < 0.40:
+            print(f"  [-] Rejected by mutation gate: kill-rate {mut_score:.1%} below 40% threshold.")
+            return False
 
         # Store in ModelGen verified library
-        mid = store(self.conn, fn_name, fn_code, test_code, f"TeacherDistilled-{model}", f"9router:{model}")
+        provenance_model = model if model else "gateway"
+        mid = store(self.conn, fn_name, fn_code, test_code, f"TeacherDistilled-{provenance_model}", f"9router:{provenance_model}")
         if mid:
-            print(f"  [+] [VERIFIED & DISTILLED] Module #{mid} '{fn_name}' learned from {model} (Mutation Kill-Rate: {mut_score:.1%})")
+            print(f"  [+] [VERIFIED & DISTILLED] Module #{mid} '{fn_name}' learned from {provenance_model} (Mutation Kill-Rate: {mut_score:.1%})")
             return True
         return False
 
@@ -200,5 +204,5 @@ if __name__ == "__main__":
     conn = init_db()
     distiller = NineRouterDistiller(conn)
     print(f"[+] Connected to 9Router Gateway at {GATEWAY_URL}")
-    learned_count = distiller.distill_frontier_batch(tasks=SAMPLE_FRONTIER_TASKS[:2], model="ds/deepseek-chat")
+    learned_count = distiller.distill_frontier_batch(tasks=DEFAULT_DISTILL_TASKS[:2], model="ds/deepseek-chat")
     print(f"\n[+] Distillation complete. ModelGen learned and verified {learned_count} new frontier skills.")

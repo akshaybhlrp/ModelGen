@@ -112,7 +112,7 @@ class ConversationalEngine:
     def load_or_train(self):
         if CONV_MODEL_PATH.exists():
             try:
-                ckpt = torch.load(CONV_MODEL_PATH, weights_only=False)
+                ckpt = torch.load(CONV_MODEL_PATH, weights_only=True)
                 vocab = ckpt["vocab"]
                 model = ConversationalIntentClassifier(len(vocab) + 5)
                 model.load_state_dict(ckpt["state_dict"])
@@ -418,7 +418,44 @@ class ConversationalEngine:
             try:
                 m = re.search(r"([\d\.\s\+\-\*\/\%\(\)\^\*\*]+[\+\-\*\/\%\^][\d\.\s\+\-\*\/\%\(\)\^\*\*]+)", clean)
                 expr = m.group(1).strip() if m else clean
-                val = eval(expr, {"__builtins__": {}}, {})
+                if len(expr) > 100:
+                    raise ValueError("Expression exceeds complexity limit")
+
+                import operator
+                ALLOWED_OPS = {
+                    ast.Add: operator.add,
+                    ast.Sub: operator.sub,
+                    ast.Mult: operator.mul,
+                    ast.Div: operator.truediv,
+                    ast.FloorDiv: operator.floordiv,
+                    ast.Mod: operator.mod,
+                    ast.Pow: operator.pow,
+                    ast.USub: operator.neg,
+                    ast.UAdd: operator.pos
+                }
+
+                def safe_eval_node(node):
+                    if isinstance(node, ast.Expression):
+                        return safe_eval_node(node.body)
+                    elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                        return node.value
+                    elif isinstance(node, ast.BinOp):
+                        left = safe_eval_node(node.left)
+                        right = safe_eval_node(node.right)
+                        op_type = type(node.op)
+                        if op_type in ALLOWED_OPS:
+                            if op_type is ast.Pow and (right > 1000 or left > 1000000):
+                                raise ValueError("Exponent too large")
+                            return ALLOWED_OPS[op_type](left, right)
+                    elif isinstance(node, ast.UnaryOp):
+                        operand = safe_eval_node(node.operand)
+                        op_type = type(node.op)
+                        if op_type in ALLOWED_OPS:
+                            return ALLOWED_OPS[op_type](operand)
+                    raise ValueError(f"Unsupported AST node: {type(node).__name__}")
+
+                tree = ast.parse(expr, mode='eval')
+                val = safe_eval_node(tree)
                 trace.append(f"Computed arithmetic result: {val}")
                 return {
                     "type": "chat",
@@ -428,6 +465,7 @@ class ConversationalEngine:
                     "code": None
                 }
             except Exception as e:
+                trace.append(f"Math parser notice: {e}")
                 trace.append(f"Math parser error: {e}")
 
         elif intent == "COMPOSITION":

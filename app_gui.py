@@ -40,7 +40,7 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             if pt_path.exists():
                 try:
                     file_bytes = pt_path.stat().st_size
-                    ckpt = torch.load(pt_path, weights_only=False)
+                    ckpt = torch.load(pt_path, weights_only=True)
                     active_params = sum(p.numel() for p in ckpt['state_dict'].values())
                 except Exception:
                     active_params = 197248
@@ -280,15 +280,11 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(response_data).encode())
 
-import socketserver
-
-class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
-    daemon_threads = True
-
 def run_server(port=PORT):
-    server_address = ('0.0.0.0', port)
-    httpd = ThreadingHTTPServer(server_address, ModelGenStudioHandler)
-    print(f"[+] ModelGen Studio GUI running at http://localhost:{port}")
+    host = os.environ.get("MODELGEN_HOST", "127.0.0.1")
+    server_address = (host, port)
+    httpd = http.server.ThreadingHTTPServer(server_address, ModelGenStudioHandler)
+    print(f"[+] ModelGen Studio GUI running at http://{host}:{port}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

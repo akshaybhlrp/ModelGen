@@ -1,5 +1,8 @@
 import os
 import sys
+import tempfile
+import zipfile
+import tarfile
 import threading
 import concurrent.futures
 from pathlib import Path
@@ -7,6 +10,7 @@ from kernel import init_db, store
 from harvester import extract_ast
 from mutation_tester import evaluate_mutation_score
 from decontaminate import DecontaminationGate
+from learned_router import train_learned_router
 import subprocess
 import shutil
 
@@ -189,7 +193,13 @@ def process_archive_file(archive_path: Path, conn) -> int:
                     zf.extractall(tmp_target)
             elif tarfile.is_tarfile(archive_path):
                 with tarfile.open(archive_path, 'r:*') as tf:
-                    tf.extractall(tmp_target)
+                    if hasattr(tarfile, 'data_filter'):
+                        tf.extractall(tmp_target, filter='data')
+                    else:
+                        for member in tf.getmembers():
+                            if member.name.startswith("/") or ".." in member.name:
+                                continue
+                            tf.extract(member, tmp_target)
             
             sub_res = ingest_local_directory(str(tmp_target), conn=conn, retrain_neural_weights=False, max_workers=4)
             learned = sub_res.get("learned_count", 0)
