@@ -236,12 +236,14 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
                     response_data = {
                         "is_conversational": True,
                         "message": conv_res["message"],
+                        "trace": conv_res.get("trace", []),
                         "latency_ms": round(latency, 2)
                     }
                 else:
                     response_data = {
                         "is_conversational": True,
                         "message": conv_res["message"],
+                        "trace": conv_res.get("trace", []),
                         "results": [{
                             "name": conv_res.get("name", "Verified Solution"),
                             "source_code": conv_res["code"],
