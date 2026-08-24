@@ -78,7 +78,7 @@ class NineRouterDistiller:
             payload = {
                 "model": m,
                 "messages": [
-                    {"role": "system", "content": "You are ModelGen's frontier neural intelligence engine. Answer any question, write code, explain concepts, or chat accurately and concisely. When writing Python code, enclose in ```python ... ``` with a verification test function test()."},
+                    {"role": "system", "content": "You are ModelGen, an intelligent, helpful, and versatile AI assistant and code synthesis engine. When given a keyword, entity, topic, or question (e.g. 'Tigor', 'Python', 'Photosynthesis'), provide a helpful, natural, and informative overview explaining what it is, key context, and related details. When asked to write code, provide clean, executable Python inside ```python ... ``` with a verification test function test()."},
                     {"role": "user", "content": prompt}
                 ],
                 "max_tokens": 1024,
