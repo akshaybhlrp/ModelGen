@@ -6,6 +6,8 @@ Lightweight HTTP API serving the LMStudio GUI interface and executing real-time 
 import http.server
 import json
 import time
+import os
+import sqlite3
 from pathlib import Path
 from kernel import init_db, retrieve, verify
 from compose import compose
@@ -13,12 +15,16 @@ from dag_composer import synthesize_dag_pipeline
 
 from conversational_learner import ConversationalEngine
 
-import os
-
 PORT = int(os.environ.get("MODELGEN_PORT", 8085))
 WEB_DIR = Path(__file__).parent / "web"
+DB_PATH = Path(__file__).parent / "frontier.db"
 
-conn = init_db()
+def get_db():
+    c = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10.0)
+    c.execute("PRAGMA journal_mode=WAL;")
+    return c
+
+conn = get_db()
 conv_engine = ConversationalEngine(conn)
 
 class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
@@ -257,9 +263,14 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(response_data).encode())
 
+import socketserver
+
+class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+
 def run_server(port=PORT):
-    server_address = ('', port)
-    httpd = http.server.HTTPServer(server_address, ModelGenStudioHandler)
+    server_address = ('0.0.0.0', port)
+    httpd = ThreadingHTTPServer(server_address, ModelGenStudioHandler)
     print(f"[+] ModelGen Studio GUI running at http://localhost:{port}")
     try:
         httpd.serve_forever()
