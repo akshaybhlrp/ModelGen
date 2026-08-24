@@ -429,27 +429,30 @@
         </div>
     </div>
 
-    <!-- Right Sidebar: Live Background Activity Monitor -->
-    <div id="activity-sidebar" style="width: 320px; background-color: var(--bg-sidebar); border-left: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px 14px; transition: all 0.25s ease; font-family: 'Inter', sans-serif;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+    <!-- Right Sidebar: Live Query Execution Inspector -->
+    <div id="activity-sidebar" style="width: 360px; background-color: var(--bg-sidebar); border-left: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px 14px; transition: all 0.25s ease; font-family: 'Inter', sans-serif;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="status-dot" style="background: #8ab4f8; box-shadow: 0 0 8px #8ab4f8;"></span>
-                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Live Activity Monitor</span>
+                <span class="status-dot" id="live-pipe-dot" style="background: #8ab4f8; box-shadow: 0 0 8px #8ab4f8;"></span>
+                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Execution Pipeline Inspector</span>
             </div>
-            <span style="font-size: 11px; background: rgba(168, 199, 250, 0.1); color: var(--accent); padding: 2px 8px; border-radius: 8px;">Real-Time</span>
+            <span id="pipeline-status-badge" style="font-size: 11px; background: rgba(52, 168, 83, 0.15); color: #81c995; border: 1px solid rgba(52, 168, 83, 0.3); padding: 2px 8px; border-radius: 8px;">IDLE / READY</span>
         </div>
 
-        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
-            Monitoring background self-learning daemon, verification events, and on-the-fly neural weight adaptations.
+        <div style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+            Live internal pipeline trace: intent routing, AST parsing, neural embeddings, sandbox verifications, and weight adaptations.
         </div>
 
         <div id="activity-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
-            <div style="font-size: 12px; color: var(--text-secondary); text-align: center; margin-top: 40px;">Polling background engine...</div>
+            <div style="font-size: 12px; color: var(--text-secondary); text-align: center; margin-top: 50px;">
+                <div style="font-size: 20px; margin-bottom: 8px;">⚡</div>
+                Send a prompt to see its step-by-step processing live in this sidebar.
+            </div>
         </div>
 
         <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 10px; font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center;">
-            <span>Auto-refresh: 3s</span>
-            <span id="activity-event-count" style="color: var(--accent); font-weight: 500;">0 events</span>
+            <span id="pipeline-latency-label">Pipeline Latency: 0ms</span>
+            <button onclick="clearPipelineInspector()" style="background: transparent; border: none; color: #888; cursor: pointer; font-size: 11px;">Clear</button>
         </div>
     </div>
 
@@ -482,7 +485,10 @@
             input.value = '';
             container.scrollTop = container.scrollHeight;
 
-            // 2. Render Assistant Placeholder
+            // 2. Set Sidebar to Processing State
+            updateSidebarProcessing(prompt);
+
+            // 3. Render Assistant Placeholder
             const modelRow = document.createElement('div');
             modelRow.className = 'message-row';
             modelRow.innerHTML = `
@@ -503,27 +509,11 @@
                 const data = await res.json();
                 const responseDiv = modelRow.querySelector('.message-content');
 
+                // Render pipeline trace steps live into the Inspector Sidebar
+                renderSidebarTrace(prompt, data.trace || [], data.latency_ms || 0);
+
                 let contentHtml = '';
                 
-                // Render Thought Trace Accordion if available
-                if (data.trace && data.trace.length > 0) {
-                    const traceItems = data.trace.map(t => `<div style="padding: 2px 0; color: #a8c7fa; font-family: 'JetBrains Mono', monospace; font-size: 11.5px;">• ${escapeHtml(t)}</div>`).join('');
-                    contentHtml += `
-                        <details style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12px;" open>
-                            <summary style="cursor: pointer; font-weight: 500; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between;">
-                                <span style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="display: inline-block; width: 6px; height: 6px; background: #8ab4f8; border-radius: 50%;"></span>
-                                    Execution &amp; Thought Trace (${data.latency_ms || 0}ms)
-                                </span>
-                                <span style="font-size: 10px; color: #666;">On-Device Sandbox</span>
-                            </summary>
-                            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
-                                ${traceItems}
-                            </div>
-                        </details>
-                    `;
-                }
-
                 if (data.is_conversational) {
                     contentHtml += `<div class="rendered-markdown">${renderMarkdown(data.message)}</div>`;
                 }
@@ -547,6 +537,7 @@
             } catch (err) {
                 const responseDiv = modelRow.querySelector('.message-content');
                 responseDiv.innerHTML = `<p style="color: #f28b82;">Error communicating with ModelGen: ${err}</p>`;
+                updateSidebarError(err);
             }
             container.scrollTop = container.scrollHeight;
         }
@@ -607,33 +598,125 @@
             }
         }
 
-        async function fetchActivityLogs() {
-            try {
-                const res = await fetch('/api/background_activity');
-                const data = await res.json();
-                const list = document.getElementById('activity-list');
-                const countBadge = document.getElementById('activity-event-count');
-                
-                if (data.events && data.events.length > 0) {
-                    countBadge.innerText = `${data.total_events} events`;
-                    list.innerHTML = data.events.map(ev => `
-                        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 12px; display: flex; flex-direction: column; gap: 4px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px;">${escapeHtml(ev.title)}</span>
-                                <span style="font-size: 10px; background: rgba(52, 168, 83, 0.15); color: #81c995; border: 1px solid rgba(52, 168, 83, 0.3); padding: 1px 6px; border-radius: 6px;">${ev.badge}</span>
-                            </div>
-                            <div style="color: var(--text-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(ev.detail)}</div>
-                            <div style="font-size: 10px; color: #666; margin-top: 2px;">${escapeHtml(ev.timestamp)}</div>
+        function updateSidebarProcessing(prompt) {
+            const list = document.getElementById('activity-list');
+            const statusBadge = document.getElementById('pipeline-status-badge');
+            const dot = document.getElementById('live-pipe-dot');
+            const latencyLabel = document.getElementById('pipeline-latency-label');
+
+            if (statusBadge) {
+                statusBadge.innerText = "PROCESSING";
+                statusBadge.style.color = "#a8c7fa";
+                statusBadge.style.borderColor = "rgba(168, 199, 250, 0.4)";
+                statusBadge.style.background = "rgba(168, 199, 250, 0.15)";
+            }
+            if (dot) {
+                dot.style.background = "#a8c7fa";
+                dot.style.boxShadow = "0 0 10px #a8c7fa";
+            }
+            if (latencyLabel) {
+                latencyLabel.innerText = "Processing input...";
+            }
+
+            list.innerHTML = `
+                <div style="background: rgba(168, 199, 250, 0.08); border: 1px solid rgba(168, 199, 250, 0.2); border-radius: 8px; padding: 12px; font-size: 12px; margin-bottom: 8px;">
+                    <div style="font-weight: 600; color: #a8c7fa; margin-bottom: 4px;">User Prompt Received:</div>
+                    <div style="color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px;">"${escapeHtml(prompt)}"</div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                        <span style="display: inline-block; width: 6px; height: 6px; background: #8ab4f8; border-radius: 50%;"></span>
+                        Tokenizing n-grams &amp; predicting intent...
+                    </div>
+                    <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                        <span style="display: inline-block; width: 6px; height: 6px; background: #8ab4f8; border-radius: 50%;"></span>
+                        Querying on-device weights &amp; sandbox verifier...
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSidebarTrace(prompt, trace, latency) {
+            const list = document.getElementById('activity-list');
+            const statusBadge = document.getElementById('pipeline-status-badge');
+            const dot = document.getElementById('live-pipe-dot');
+            const latencyLabel = document.getElementById('pipeline-latency-label');
+
+            if (statusBadge) {
+                statusBadge.innerText = "COMPLETE";
+                statusBadge.style.color = "#81c995";
+                statusBadge.style.borderColor = "rgba(52, 168, 83, 0.3)";
+                statusBadge.style.background = "rgba(52, 168, 83, 0.15)";
+            }
+            if (dot) {
+                dot.style.background = "#34a853";
+                dot.style.boxShadow = "0 0 8px #34a853";
+            }
+            if (latencyLabel) {
+                latencyLabel.innerText = `Pipeline Latency: ${latency}ms`;
+            }
+
+            const stepCards = (trace.length > 0 ? trace : ["Prompt routed directly to on-device response generator"]).map((step, idx) => {
+                return `
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 12px; display: flex; flex-direction: column; gap: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 600; color: #a8c7fa; font-size: 11px;">STEP ${idx + 1}</span>
+                            <span style="font-size: 10px; background: rgba(52, 168, 83, 0.15); color: #81c995; border: 1px solid rgba(52, 168, 83, 0.3); padding: 1px 6px; border-radius: 6px;">OK</span>
                         </div>
-                    `).join('');
-                }
-            } catch(e) {}
+                        <div style="color: #e3e3e3; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.4;">${escapeHtml(step)}</div>
+                    </div>
+                `;
+            }).join('');
+
+            list.innerHTML = `
+                <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; margin-bottom: 8px;">
+                    <div style="font-weight: 600; color: var(--text-secondary); font-size: 11px; margin-bottom: 2px;">PROMPT EXECUTED:</div>
+                    <div style="color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">"${escapeHtml(prompt)}"</div>
+                </div>
+                ${stepCards}
+            `;
+        }
+
+        function updateSidebarError(err) {
+            const statusBadge = document.getElementById('pipeline-status-badge');
+            const dot = document.getElementById('live-pipe-dot');
+            if (statusBadge) {
+                statusBadge.innerText = "ERROR";
+                statusBadge.style.color = "#f28b82";
+                statusBadge.style.borderColor = "rgba(234, 67, 53, 0.4)";
+                statusBadge.style.background = "rgba(234, 67, 53, 0.15)";
+            }
+            if (dot) {
+                dot.style.background = "#ea4335";
+                dot.style.boxShadow = "0 0 8px #ea4335";
+            }
+        }
+
+        function clearPipelineInspector() {
+            const list = document.getElementById('activity-list');
+            const statusBadge = document.getElementById('pipeline-status-badge');
+            const latencyLabel = document.getElementById('pipeline-latency-label');
+            if (list) {
+                list.innerHTML = `
+                    <div style="font-size: 12px; color: var(--text-secondary); text-align: center; margin-top: 50px;">
+                        <div style="font-size: 20px; margin-bottom: 8px;">⚡</div>
+                        Send a prompt to see its step-by-step processing live in this sidebar.
+                    </div>
+                `;
+            }
+            if (statusBadge) {
+                statusBadge.innerText = "IDLE / READY";
+                statusBadge.style.color = "#81c995";
+                statusBadge.style.borderColor = "rgba(52, 168, 83, 0.3)";
+                statusBadge.style.background = "rgba(52, 168, 83, 0.15)";
+            }
+            if (latencyLabel) {
+                latencyLabel.innerText = "Pipeline Latency: 0ms";
+            }
         }
 
         fetchModelInfo();
-        fetchActivityLogs();
         setInterval(fetchModelInfo, 5000);
-        setInterval(fetchActivityLogs, 3000);
     </script>
 </body>
 </html>
