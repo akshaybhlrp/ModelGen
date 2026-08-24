@@ -197,18 +197,21 @@ class ConversationalEngine:
     def process(self, text: str) -> dict:
         clean = text.strip()
         
-        # 0. Check if user provided a local directory path (e.g. /path/to/project, ./src, "scan /my/dir", "learn from ./src")
+        # 0. Check if user provided a local directory or file path (including paths with spaces, quotes, etc.)
         clean_path = clean.strip("\"' \t\n")
-        # Extract path from phrases like "scan /path/to/folder" or "ingest ./my_code"
-        path_match = re.search(r"(?:scan|ingest|learn from|index|parse|read dir)\s+([~/./\w\-_\\/]+)", clean, re.IGNORECASE)
+        # Extract path from phrases like "scan /path/to/folder with spaces" or "ingest ./my_code"
+        path_match = re.search(r"^(?:scan|ingest|learn from|index|parse|read dir|analyze)\s+(.+)$", clean, re.IGNORECASE)
         if path_match:
             candidate_path = path_match.group(1).strip("\"' ")
         else:
             candidate_path = clean_path
 
-        expanded = Path(os.path.expanduser(candidate_path))
+        # Unescape backslash-escaped spaces (e.g. "HP\ Repo" -> "HP Repo")
+        candidate_path_unescaped = candidate_path.replace("\\ ", " ")
+        expanded = Path(os.path.expanduser(candidate_path_unescaped))
+
         # Handle Directory Scanning
-        if (candidate_path.startswith("/") or candidate_path.startswith("./") or candidate_path.startswith("~") or candidate_path.startswith("../")) and expanded.is_dir():
+        if (candidate_path_unescaped.startswith("/") or candidate_path_unescaped.startswith("./") or candidate_path_unescaped.startswith("~") or candidate_path_unescaped.startswith("../") or expanded.exists()) and expanded.is_dir():
             from local_learner import ingest_local_directory
             res = ingest_local_directory(str(expanded), conn=self.conn)
             if res["status"] == "success":
@@ -245,7 +248,7 @@ class ConversationalEngine:
             }
 
         # Handle Single File Analysis
-        if (candidate_path.startswith("/") or candidate_path.startswith("./") or candidate_path.startswith("~") or candidate_path.startswith("../")) and expanded.is_file():
+        if (candidate_path_unescaped.startswith("/") or candidate_path_unescaped.startswith("./") or candidate_path_unescaped.startswith("~") or candidate_path_unescaped.startswith("../") or expanded.exists()) and expanded.is_file():
             from local_learner import process_media_file, process_archive_file, SUPPORTED_CODE_EXTS, SUPPORTED_ARCHIVE_EXTS
             from kernel import store
             from harvester import extract_ast
