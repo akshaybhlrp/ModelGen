@@ -520,11 +520,16 @@
             container.scrollTop = container.scrollHeight;
 
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 180000); // 3-minute timeout for large scans
+
                 const res = await fetch('/api/query', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({prompt: prompt, mode: 'query'})
+                    body: JSON.stringify({prompt: prompt, mode: 'query'}),
+                    signal: controller.signal
                 });
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 const responseDiv = modelRow.querySelector('.message-content');
 
