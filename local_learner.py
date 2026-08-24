@@ -9,26 +9,90 @@ from mutation_tester import evaluate_mutation_score
 from decontaminate import DecontaminationGate
 from learned_router import train_learned_router
 
+import zipfile
+import tarfile
+import tempfile
+
 SUPPORTED_CODE_EXTS = {".py"}
 SUPPORTED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 SUPPORTED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 SUPPORTED_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".ogg"}
-SUPPORTED_DOC_EXTS = {".md", ".txt", ".json", ".yaml", ".yml"}
+SUPPORTED_DOC_EXTS = {".md", ".txt", ".json", ".yaml", ".yml", ".pdf", ".csv", ".tsv"}
+SUPPORTED_ARCHIVE_EXTS = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".tar.gz", ".tar.bz2"}
+
+def extract_pdf_text(pdf_path: Path) -> str:
+    """Extracts text, code blocks, and doc contents from a PDF file."""
+    text_content = []
+    # 1. Try pypdf / pypdf2 / pdfplumber if installed
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(str(pdf_path))
+        for page in reader.pages[:50]:
+            t = page.extract_text()
+            if t:
+                text_content.append(t)
+    except Exception:
+        pass
+    
+    if not text_content:
+        # 2. Try pdftotext CLI tool fallback
+        try:
+            import subprocess
+            r = subprocess.run(["pdftotext", str(pdf_path), "-"], capture_output=True, text=True, timeout=5)
+            if r.returncode == 0 and r.stdout:
+                text_content.append(r.stdout)
+        except Exception:
+            pass
+
+    return "\n".join(text_content) if text_content else f"PDF Document: {pdf_path.name}"
+
+def process_archive_file(archive_path: Path, conn) -> int:
+    """Unpacks compressed archives in an isolated temp folder and ingests contained code & media."""
+    learned = 0
+    with tempfile.TemporaryDirectory() as tmp_extract_dir:
+        tmp_target = Path(tmp_extract_dir)
+        try:
+            if zipfile.is_zipfile(archive_path):
+                with zipfile.ZipFile(archive_path, 'r') as zf:
+                    zf.extractall(tmp_target)
+            elif tarfile.is_tarfile(archive_path):
+                with tarfile.open(archive_path, 'r:*') as tf:
+                    tf.extractall(tmp_target)
+            
+            # Recursively ingest the unpacked contents
+            sub_res = ingest_local_directory(str(tmp_target), conn=conn, retrain_neural_weights=False, max_workers=4)
+            learned = sub_res.get("learned_count", 0)
+        except Exception:
+            pass
+    return learned
 
 def process_media_file(file_path: Path, conn) -> list:
-    """Extracts algorithmic patterns, OCR text, or descriptions from image/video/audio media."""
+    """Extracts algorithmic patterns, OCR text, or descriptions from image/video/audio/pdf media."""
     items = []
     ext = file_path.suffix.lower()
     
-    # 1. Images (OCR or image captioning extraction)
-    if ext in SUPPORTED_IMAGE_EXTS:
+    # 1. PDF Documents
+    if ext == ".pdf":
         try:
-            # Fallback OCR with pytesseract / PIL if installed, otherwise basic metadata descriptor
+            pdf_text = extract_pdf_text(file_path)
+            # Check if PDF contains executable Python code
+            from harvester import extract_ast
+            extracted_code = extract_ast(pdf_text)
+            if extracted_code:
+                for fn_name, fn_code, test_code in extracted_code:
+                    items.append((fn_name, fn_code, test_code))
+            else:
+                items.append((f"pdf_{file_path.stem}", f"# PDF Document {file_path.name}\n# Content Summary:\n# {pdf_text[:300]}\npass", "def test():\n    pass\n"))
+        except Exception:
+            pass
+
+    # 2. Images (OCR or image captioning extraction)
+    elif ext in SUPPORTED_IMAGE_EXTS:
+        try:
             from PIL import Image
             img = Image.open(file_path)
             w, h = img.size
             desc = f"Image asset: {file_path.name} (dimensions {w}x{h})"
-            # Attempt OCR extraction
             try:
                 import pytesseract
                 ocr_text = pytesseract.image_to_string(img).strip()
@@ -40,7 +104,7 @@ def process_media_file(file_path: Path, conn) -> list:
         except Exception:
             pass
 
-    # 2. Videos / Audio (metadata and transcript hooks)
+    # 3. Videos / Audio (metadata and transcript hooks)
     elif ext in SUPPORTED_VIDEO_EXTS or ext in SUPPORTED_AUDIO_EXTS:
         try:
             size_mb = round(file_path.stat().st_size / (1024 * 1024), 2)
@@ -72,14 +136,15 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
                 all_files.append(Path(root) / f)
 
     code_files = [f for f in all_files if f.suffix.lower() in SUPPORTED_CODE_EXTS]
-    media_files = [f for f in all_files if f.suffix.lower() in (SUPPORTED_IMAGE_EXTS | SUPPORTED_VIDEO_EXTS | SUPPORTED_AUDIO_EXTS)]
+    media_files = [f for f in all_files if f.suffix.lower() in (SUPPORTED_IMAGE_EXTS | SUPPORTED_VIDEO_EXTS | SUPPORTED_AUDIO_EXTS | {".pdf"})]
+    archive_files = [f for f in all_files if any(f.name.lower().endswith(ext) for ext in SUPPORTED_ARCHIVE_EXTS)]
 
     total_found = 0
     total_stored = 0
     modules_stored = []
     lock = threading.Lock()
 
-    print(f"\n[+] Async Scanning Directory: {target} ({len(code_files)} Python, {len(media_files)} Media files across {max_workers} threads)")
+    print(f"\n[+] Async Scanning Directory: {target} ({len(code_files)} Code, {len(media_files)} Media/PDF, {len(archive_files)} Archives across {max_workers} threads)")
 
     def process_single_code_file(py_file: Path):
         nonlocal total_found, total_stored
@@ -140,6 +205,16 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
             code_futures = [executor.submit(process_single_code_file, f) for f in code_files]
             media_futures = [executor.submit(process_single_media, f) for f in media_files]
             concurrent.futures.wait(code_futures + media_futures)
+
+    # Process compressed archives
+    for arc_file in archive_files:
+        try:
+            arc_learned = process_archive_file(arc_file, conn)
+            total_stored += arc_learned
+            if arc_learned > 0:
+                print(f"  [ARCHIVE UNPACKED & LEARNED] {arc_file.name} -> {arc_learned} items")
+        except Exception:
+            pass
 
     # On-the-fly neural router weight retraining
     if total_stored > 0 and retrain_neural_weights:
