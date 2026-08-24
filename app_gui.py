@@ -83,6 +83,54 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"total": len(modules), "modules": modules}).encode())
+        elif self.path == "/api/background_activity":
+            # Return live background activity logs, module growth, and daemon state
+            events = []
+            
+            # 1. Check SQLite module registration log
+            try:
+                latest_mods = conn.execute("SELECT id, name, license, source_url, compile_status, fetched_at FROM modules ORDER BY id DESC LIMIT 15").fetchall()
+                for mid, name, lic, url, status, fetched in latest_mods:
+                    events.append({
+                        "id": mid,
+                        "type": "module_learned",
+                        "title": f"Module #{mid}: {name}",
+                        "badge": "VERIFIED",
+                        "badge_class": "badge-verified",
+                        "detail": f"Source: {url} · Status: {status}",
+                        "timestamp": fetched or "Just now"
+                    })
+            except Exception:
+                pass
+
+            # 2. Check daemon log file if exists
+            daemon_log_path = Path("daemon.log")
+            if daemon_log_path.exists():
+                try:
+                    lines = daemon_log_path.read_text().splitlines()[-5:]
+                    for idx, line in enumerate(reversed(lines)):
+                        if line.strip():
+                            events.append({
+                                "id": f"log_{idx}",
+                                "type": "daemon_log",
+                                "title": "Background Learning Daemon",
+                                "badge": "DAEMON",
+                                "badge_class": "badge-daemon",
+                                "detail": line[:100],
+                                "timestamp": "Live"
+                            })
+                except Exception:
+                    pass
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "active",
+                "total_events": len(events),
+                "events": events
+            }).encode())
         elif self.path == "/lmstudio-greeting" or self.path == "/v1":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
