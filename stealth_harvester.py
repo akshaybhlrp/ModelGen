@@ -158,7 +158,7 @@ class StealthWebHarvester:
             # 1. DuckDuckGo HTML / Lite Search
             ddg_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
             headers = get_stealth_headers()
-            res = self.session.get(ddg_url, headers=headers, timeout=8)
+            res = self.session.get(ddg_url, headers=headers, timeout=2.5)
             if res.status_code == 200:
                 import re
                 # Extract text from result snippets
@@ -175,7 +175,7 @@ class StealthWebHarvester:
                 # 2. Fallback to Google Search HTML scrape
                 google_url = f"https://www.google.com/search?q={quote_plus(query)}&hl=en"
                 headers = get_stealth_headers()
-                res = self.session.get(google_url, headers=headers, timeout=8)
+                res = self.session.get(google_url, headers=headers, timeout=2.5)
                 if res.status_code == 200:
                     import re
                     # Look for snippet blocks

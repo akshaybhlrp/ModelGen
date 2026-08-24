@@ -73,7 +73,7 @@ class NineRouterDistiller:
             models_to_try = ACTIVE_TEACHER_MODELS
 
         url = f"{self.base_url}/chat/completions"
-        for m in models_to_try:
+        for m in models_to_try[:4]:
             if not m: continue
             payload = {
                 "model": m,
@@ -85,7 +85,7 @@ class NineRouterDistiller:
                 "stream": False
             }
             try:
-                res = requests.post(url, headers=self.headers, json=payload, timeout=15)
+                res = requests.post(url, headers=self.headers, json=payload, timeout=3.5)
                 if res.status_code == 200:
                     text_resp = res.text.strip()
                     # 1. Try standard JSON
