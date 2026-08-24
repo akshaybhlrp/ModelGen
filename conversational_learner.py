@@ -294,11 +294,21 @@ class ConversationalEngine:
                         "tests": tests
                     }
 
-        # On-the-Fly Teacher Synthesis & Weight Learning via 9Router Gateway
+        # Live Google/Web Search Grounding + On-the-Fly Teacher Distillation
         try:
+            # 1. Search Google / Web for live grounded facts and documentation
+            from stealth_harvester import StealthWebHarvester
+            harvester = StealthWebHarvester(self.conn)
+            web_context = harvester.search_web_grounding(clean, max_results=3)
+
+            # 2. Augment prompt with live web context for distillation
+            augmented_prompt = clean
+            if web_context:
+                augmented_prompt = f"User Request: {clean}\n\nLive Web Grounding Context:\n{web_context}\n\nSynthesize the exact answer or Python implementation based on this verified context."
+
             from nine_router_distiller import NineRouterDistiller
             distiller = NineRouterDistiller(self.conn)
-            raw_teacher_reply = distiller.query_teacher(clean)
+            raw_teacher_reply = distiller.query_teacher(augmented_prompt)
             if raw_teacher_reply:
                 fn_name, fn_code, test_code = distiller.parse_python_code(raw_teacher_reply)
                 if fn_code:
@@ -306,14 +316,14 @@ class ConversationalEngine:
                         test_code = "def test():\n    pass\n"
                     
                     # Verify in local sandbox and store
-                    mid = store(self.conn, fn_name or "custom_solution", fn_code, test_code, "9Router-Distilled", "9router:on_the_fly")
+                    mid = store(self.conn, fn_name or "custom_solution", fn_code, test_code, "Web-Grounding-Distilled", "web_search:grounded")
                     if mid:
                         # Auto-retrain neural weights with new skill
                         self.adapt_on_the_fly(clean, label_id=4)
                         return {
                             "type": "synthesis",
                             "is_conversational": True,
-                            "message": f"I synthesized and verified this solution on-the-fly via 9Router teacher distillation and updated my on-device weights:",
+                            "message": f"I synthesized and verified this solution using live web grounding + distillation, and added it to my local weights:",
                             "code": fn_code,
                             "tests": test_code
                         }

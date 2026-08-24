@@ -151,6 +151,44 @@ class StealthWebHarvester:
                 
         return total_stored
 
+    def search_web_grounding(self, query: str, max_results: int = 3) -> str:
+        """Searches Google/DuckDuckGo for the user's prompt to retrieve real-time facts and documentation snippets."""
+        snippets = []
+        try:
+            # 1. DuckDuckGo HTML / Lite Search
+            ddg_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+            headers = get_stealth_headers()
+            res = self.session.get(ddg_url, headers=headers, timeout=8)
+            if res.status_code == 200:
+                import re
+                # Extract text from result snippets
+                matches = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', res.text, re.DOTALL)
+                for m in matches[:max_results]:
+                    clean_txt = re.sub(r"<.*?>", "", m).strip()
+                    if clean_txt:
+                        snippets.append(clean_txt)
+        except Exception:
+            pass
+
+        if not snippets:
+            try:
+                # 2. Fallback to Google Search HTML scrape
+                google_url = f"https://www.google.com/search?q={quote_plus(query)}&hl=en"
+                headers = get_stealth_headers()
+                res = self.session.get(google_url, headers=headers, timeout=8)
+                if res.status_code == 200:
+                    import re
+                    # Look for snippet blocks
+                    matches = re.findall(r'<div class="BNeawe s3v9rd AP7Wnd"[^>]*>(.*?)</div>', res.text, re.DOTALL)
+                    for m in matches[:max_results]:
+                        clean_txt = re.sub(r"<.*?>", "", m).strip()
+                        if clean_txt and len(clean_txt) > 20:
+                            snippets.append(clean_txt)
+            except Exception:
+                pass
+
+        return "\n".join(snippets) if snippets else ""
+
 if __name__ == "__main__":
     conn = init_db()
     harvester = StealthWebHarvester(conn)
