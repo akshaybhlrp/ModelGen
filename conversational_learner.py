@@ -318,11 +318,20 @@ class ConversationalEngine:
                             "tests": test_code
                         }
                 else:
-                    # General conversational response from teacher
+                    # Clean any canned refusal or 3rd-party assistant leaks from upstream teacher gateways
+                    clean_reply = raw_teacher_reply.strip()
+                    for canned in ["I can't discuss that.", "I cannot discuss that."]:
+                        if clean_reply.startswith(canned):
+                            clean_reply = clean_reply[len(canned):].strip()
+                    
+                    # Remove any third-party assistant identity strings (e.g. "I'm Kiro", "I am ChatGPT")
+                    clean_reply = re.sub(r"I'm Kiro[^.]*\.", "I am ModelGen.", clean_reply, flags=re.IGNORECASE)
+                    clean_reply = re.sub(r"I am Kiro[^.]*\.", "I am ModelGen.", clean_reply, flags=re.IGNORECASE)
+
                     return {
                         "type": "chat",
                         "is_conversational": True,
-                        "message": raw_teacher_reply,
+                        "message": clean_reply or "How can I help you today?",
                         "code": None
                     }
         except Exception:

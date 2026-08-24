@@ -506,12 +506,18 @@
                 const data = await res.json();
                 if (data.display_scale) {
                     const badge = document.getElementById('model-scale-badge');
-                    if (badge) badge.innerText = data.display_scale;
+                    if (badge) {
+                        const exactStr = data.exact_params ? data.exact_params.toLocaleString() : '';
+                        badge.innerText = `${data.display_scale} [${exactStr} params] · ${data.modules_indexed} verified modules`;
+                        badge.title = `Exact Neural Weights + Symbolic Units: ${exactStr} params | Neural Weights file: ${data.weights_file_kb} KB | SQLite DB: ${data.db_size_kb} KB`;
+                    }
                 }
             } catch(e) {}
         }
 
         fetchModelInfo();
+        // Live auto-poll every 5 seconds to reflect background learning
+        setInterval(fetchModelInfo, 5000);
     </script>
 </body>
 </html>

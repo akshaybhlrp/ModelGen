@@ -25,19 +25,36 @@ HEADERS = {
 }
 
 ACTIVE_TEACHER_MODELS = [
-    "gemini/gemini-3.7-flash",
-    "kr/claude-sonnet-4.5",
     "gh/gpt-4o",
     "kr/auto",
+    "kr/claude-sonnet-4.5",
+    "gh/gpt-4o-mini",
+    "kr/qwen3-coder-next",
     "openrouter/openrouter/free",
-    "gemini/gemini-3.5-flash-lite"
+    "kimi/kimi-for-coding",
+    "ds/deepseek-chat"
 ]
+
+SYNTHESIS_PROMPT = """Write a complete, high-performance, standalone Python function or class for the following task:
+{task}
+
+Requirements:
+1. Provide clean, production-grade Python code inside ```python ... ```
+2. Include at least 3 assertions in a verification function named `def test():` or `def test_<name>():` to verify correctness.
+3. No external dependencies, use pure Python stdlib.
+"""
 
 DEFAULT_DISTILL_TASKS = [
     "Implement an LRU Cache class with get and put operations in O(1) time complexity.",
     "Implement Trie (Prefix Tree) with insert, search, and startsWith methods.",
     "Find the longest increasing subsequence length in an array in O(n log n).",
-    "Implement Kadane algorithm to find the maximum sum of a contiguous subarray."
+    "Implement Kadane algorithm to find the maximum sum of a contiguous subarray.",
+    "Implement a MinHeap priority queue class with push, pop, and peek operations.",
+    "Implement Topological Sort for a Directed Acyclic Graph using Kahn's algorithm.",
+    "Implement Knapsack 0/1 dynamic programming algorithm returning maximum value.",
+    "Implement Levenshtein edit distance between two strings with DP table.",
+    "Implement Dijkstra algorithm to find shortest paths from source in weighted graph.",
+    "Implement Rabin-Karp string pattern matching algorithm using rolling hash."
 ]
 
 class NineRouterDistiller:
@@ -137,8 +154,8 @@ class NineRouterDistiller:
             return functions[0][0], functions[0][1], ""
         return None, None, None
 
-    def distill_task(self, task_description: str, model: str = "ds/deepseek-chat") -> bool:
-        print(f"\n[9Router Distill] Prompting frontier teacher '{model}' for: '{task_description}'...")
+    def distill_task(self, task_description: str, model: str = None) -> bool:
+        print(f"\n[9Router Distill] Prompting frontier teacher for: '{task_description}'...")
         prompt = SYNTHESIS_PROMPT.format(task=task_description)
         raw_code = self.query_teacher(prompt, model=model)
         if not raw_code:
