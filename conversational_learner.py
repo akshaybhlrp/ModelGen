@@ -121,7 +121,7 @@ class ConversationalEngine:
     def predict_intent(self, text: str) -> str:
         low = text.lower().strip()
         
-        # 1. Direct exact greetings ONLY
+        # 1. Direct exact greetings ONLY (strict equality)
         exact_greetings = {"hi", "hello", "hey", "hola", "greetings", "good morning", "good evening", "hi modelgen", "hello modelgen", "yo", "sup"}
         if low in exact_greetings:
             return "GREETING"
@@ -130,8 +130,9 @@ class ConversationalEngine:
         if low in {"thanks", "thank you", "cool", "awesome", "bye", "goodbye"}:
             return "CASUAL_CHAT"
             
-        # 2. Mathematical expression detection (e.g. 5*6, (2+3)*4, 10/2)
-        if re.match(r"^[\d\s\+\-\*\/\%\(\)\.\^\*\*]+$", low) and any(op in low for op in "+-*/%^"):
+        # 2. Mathematical expression detection (e.g. 5*6, (2+3)*4, 10/2, "what is 2+0", "calculate 15 * 4")
+        math_match = re.search(r"([\d\.\s\+\-\*\/\%\(\)\^\*\*]+[\+\-\*\/\%\^][\d\.\s\+\-\*\/\%\(\)\^\*\*]+)", low)
+        if (re.match(r"^[\d\s\+\-\*\/\%\(\)\.\^\*\*]+$", low) and any(op in low for op in "+-*/%^")) or (math_match and any(w in low for w in ["what", "is", "calc", "calculate", "evaluate", "how much", "="])):
             return "MATH_CALC"
 
         tokens_raw = tokenize(text)
@@ -144,27 +145,47 @@ class ConversationalEngine:
             logits = self.model(inp)
             pred = torch.argmax(logits, dim=1).item()
         
-        return INTENT_LABELS.get(pred, "CODE_SYNTHESIS")
+        predicted = INTENT_LABELS.get(pred, "CODE_SYNTHESIS")
+        # Ensure that GREETING is only returned if input contains greeting keywords
+        if predicted == "GREETING" and not any(w in low for w in ["hi", "hello", "hey", "hola", "greeting", "morning", "evening", "namaste", "sup", "yo"]):
+            return "CODE_SYNTHESIS"
+        return predicted
 
     def adapt_on_the_fly(self, text: str, label_id: int):
         """Performs immediate online gradient descent to update neural weights on-the-fly."""
         try:
-            tokens = [self.vocab.get(w, self.vocab["<unk>"]) for w in tokenize(text)]
-            if not tokens:
+            tokens_raw = tokenize(text)
+            if not tokens_raw:
                 return
+            # Dynamically register any new vocabulary token
+            vocab_changed = False
+            for w in tokens_raw:
+                if w not in self.vocab:
+                    self.vocab[w] = len(self.vocab)
+                    vocab_changed = True
+            
+            if vocab_changed:
+                # Expand embedding layer weights to accommodate new vocab size
+                old_emb = self.model.embedding.weight.data
+                new_emb = nn.EmbeddingBag(len(self.vocab) + 5, old_emb.size(1), mode='mean')
+                new_emb.weight.data[:old_emb.size(0)] = old_emb
+                self.model.embedding = new_emb
+
+            tokens = [self.vocab[w] for w in tokens_raw]
             inp = torch.tensor([tokens], dtype=torch.long)
             target = torch.tensor([label_id], dtype=torch.long)
 
             self.model.train()
-            optimizer = optim.SGD(self.model.parameters(), lr=0.05)
+            optimizer = optim.Adam(self.model.parameters(), lr=0.1)
             criterion = nn.CrossEntropyLoss()
             
-            # Single-step online SGD update
-            out = self.model(inp)
-            loss = criterion(out, target)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            # Step online gradient updates for prompt memorization
+            for _ in range(15):
+                out = self.model(inp)
+                loss = criterion(out, target)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
             self.model.eval()
             
             # Save updated weights checkpoint
@@ -227,12 +248,14 @@ class ConversationalEngine:
 
         elif intent == "MATH_CALC":
             try:
-                # Safe mathematical evaluation
-                val = eval(clean, {"__builtins__": {}}, {})
+                # Extract math expression substring
+                m = re.search(r"([\d\.\s\+\-\*\/\%\(\)\^\*\*]+[\+\-\*\/\%\^][\d\.\s\+\-\*\/\%\(\)\^\*\*]+)", clean)
+                expr = m.group(1).strip() if m else clean
+                val = eval(expr, {"__builtins__": {}}, {})
                 return {
                     "type": "chat",
                     "is_conversational": True,
-                    "message": f"**{clean}** = `{val}`",
+                    "message": f"{expr} = `{val}`",
                     "code": None
                 }
             except Exception:
