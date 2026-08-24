@@ -301,7 +301,30 @@ def process_media_file(file_path: Path, conn) -> list:
 
     return items
 
-def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: bool = True, max_workers: int = 8) -> dict:
+# Global Real-Time Scan Progress State
+SCAN_PROGRESS = {
+    "active": False,
+    "directory": "",
+    "total_files": 0,
+    "processed_files": 0,
+    "learned_count": 0,
+    "current_file": "",
+    "percent": 0,
+    "status": "idle"
+}
+PROGRESS_LOCK = threading.Lock()
+
+def get_scan_progress():
+    with PROGRESS_LOCK:
+        return dict(SCAN_PROGRESS)
+
+def set_scan_progress(**kwargs):
+    with PROGRESS_LOCK:
+        SCAN_PROGRESS.update(kwargs)
+        if SCAN_PROGRESS["total_files"] > 0:
+            SCAN_PROGRESS["percent"] = min(100, int((SCAN_PROGRESS["processed_files"] / SCAN_PROGRESS["total_files"]) * 100))
+
+def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: bool = True, max_workers: int = 8, progress_callback=None) -> dict:
     """Asynchronous, multi-worker recursive directory scanner for code and multimodal media."""
     target = Path(dir_path).resolve()
     if not target.exists() or not target.is_dir():
@@ -330,9 +353,32 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
     total_found = 0
     total_stored = 0
     modules_stored = []
+    processed_count = 0
     lock = threading.Lock()
 
+    set_scan_progress(
+        active=True,
+        directory=str(target.name),
+        total_files=len(all_files),
+        processed_files=0,
+        learned_count=0,
+        current_file="Initializing scan...",
+        status="scanning"
+    )
+
     print(f"\n[+] Async Scanning Directory: {target} ({len(code_files)} Code, {len(media_files)} All Multi-Format Files, {len(archive_files)} Archives across {max_workers} threads)")
+
+    def update_file_progress(file_path: Path):
+        nonlocal processed_count
+        with lock:
+            processed_count += 1
+            set_scan_progress(
+                processed_files=processed_count,
+                current_file=file_path.name,
+                learned_count=total_stored
+            )
+            if progress_callback:
+                progress_callback(processed_count, len(all_files), file_path.name, total_stored)
 
     def process_single_code_file(py_file: Path):
         nonlocal total_found, total_stored
@@ -364,6 +410,8 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
                         print(f"  [VERIFIED & LEARNED] #{mid} '{fn_name}' from {py_file.name} (Mutation Kill-Rate: {mut_score:.1%})")
         except Exception:
             pass
+        finally:
+            update_file_progress(py_file)
 
     def process_single_media(m_file: Path):
         nonlocal total_found, total_stored
@@ -380,6 +428,8 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
                         print(f"  [MEDIA INDEXED] #{mid} '{m_name}' ({m_file.suffix})")
         except Exception:
             pass
+        finally:
+            update_file_progress(m_file)
 
     # Process files
     if max_workers <= 1 or len(code_files) + len(media_files) <= 1:
@@ -403,11 +453,23 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
                 print(f"  [ARCHIVE UNPACKED & LEARNED] {arc_file.name} -> {arc_learned} items")
         except Exception:
             pass
+        finally:
+            update_file_progress(arc_file)
 
     # On-the-fly neural router weight retraining
     if total_stored > 0 and retrain_neural_weights:
+        set_scan_progress(current_file="Adapting neural router weights (InfoNCE)...", status="retraining")
         print(f"\n[+] Adapting Neural Router Weights for {total_stored} newly learned items...")
         train_learned_router(conn, epochs=10)
+
+    set_scan_progress(
+        active=False,
+        processed_files=len(all_files),
+        percent=100,
+        current_file="Scan & Ingestion Complete",
+        status="complete",
+        learned_count=total_stored
+    )
 
     return {
         "status": "success",

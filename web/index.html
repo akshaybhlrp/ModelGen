@@ -443,10 +443,29 @@
             Live internal pipeline trace: intent routing, AST parsing, neural embeddings, sandbox verifications, and weight adaptations.
         </div>
 
+        <!-- Live Scan Progress Bar Card -->
+        <div id="scan-progress-card" style="display: none; background: rgba(168, 199, 250, 0.08); border: 1px solid rgba(168, 199, 250, 0.3); border-radius: 10px; padding: 12px; margin-bottom: 12px; animation: fadeIn 0.2s ease;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span id="scan-dir-name" style="font-size: 12px; font-weight: 600; color: #a8c7fa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">Scanning Folder...</span>
+                <span id="scan-percent-badge" style="font-size: 12px; font-weight: 700; color: #fff;">0%</span>
+            </div>
+            
+            <!-- Progress Bar Track -->
+            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+                <div id="scan-progress-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #8ab4f8, #c58af9); border-radius: 4px; transition: width 0.15s ease;"></div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary);">
+                <span id="scan-files-counter">0 / 0 files</span>
+                <span id="scan-learned-counter" style="color: #81c995;">0 verified</span>
+            </div>
+            <div id="scan-current-file" style="margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #e3e3e3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Initializing...</div>
+        </div>
+
         <div id="activity-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
             <div style="font-size: 12px; color: var(--text-secondary); text-align: center; margin-top: 50px;">
                 <div style="font-size: 20px; margin-bottom: 8px;">⚡</div>
-                Send a prompt to see its step-by-step processing live in this sidebar.
+                Send a prompt or scan path to see its step-by-step processing live in this sidebar.
             </div>
         </div>
 
@@ -715,8 +734,45 @@
             }
         }
 
+        async function pollScanProgress() {
+            try {
+                const res = await fetch('/api/scan_progress');
+                const p = await res.json();
+                const card = document.getElementById('scan-progress-card');
+                const fill = document.getElementById('scan-progress-fill');
+                const dirLabel = document.getElementById('scan-dir-name');
+                const pctBadge = document.getElementById('scan-percent-badge');
+                const filesCounter = document.getElementById('scan-files-counter');
+                const learnedCounter = document.getElementById('scan-learned-counter');
+                const currentFileLabel = document.getElementById('scan-current-file');
+
+                if (p.active || p.status === 'scanning' || p.status === 'retraining') {
+                    card.style.display = 'block';
+                    dirLabel.innerText = `Scanning: ${p.directory || 'Directory'}`;
+                    pctBadge.innerText = `${p.percent || 0}%`;
+                    fill.style.width = `${p.percent || 0}%`;
+                    filesCounter.innerText = `${p.processed_files || 0} / ${p.total_files || 0} files`;
+                    learnedCounter.innerText = `${p.learned_count || 0} verified`;
+                    currentFileLabel.innerText = p.current_file || "Processing...";
+                } else if (p.status === 'complete') {
+                    card.style.display = 'block';
+                    pctBadge.innerText = `100%`;
+                    fill.style.width = `100%`;
+                    filesCounter.innerText = `${p.processed_files || p.total_files} / ${p.total_files} files`;
+                    learnedCounter.innerText = `${p.learned_count || 0} verified`;
+                    currentFileLabel.innerText = "Scan Complete · Neural weights updated";
+                    setTimeout(() => {
+                        if (!p.active) card.style.display = 'none';
+                    }, 8000);
+                } else {
+                    card.style.display = 'none';
+                }
+            } catch(e) {}
+        }
+
         fetchModelInfo();
         setInterval(fetchModelInfo, 5000);
+        setInterval(pollScanProgress, 250);
     </script>
 </body>
 </html>

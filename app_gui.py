@@ -89,6 +89,14 @@ class ModelGenStudioHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"total": len(modules), "modules": modules}).encode())
+        elif self.path == "/api/scan_progress":
+            from local_learner import get_scan_progress
+            prog = get_scan_progress()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(prog).encode())
         elif self.path == "/api/background_activity":
             # Return live background activity logs, module growth, and daemon state
             events = []
