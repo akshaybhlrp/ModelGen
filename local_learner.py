@@ -7,11 +7,32 @@ from kernel import init_db, store
 from harvester import extract_ast
 from mutation_tester import evaluate_mutation_score
 from decontaminate import DecontaminationGate
-from learned_router import train_learned_router
+import subprocess
+import shutil
 
-import zipfile
-import tarfile
-import tempfile
+RTK_BIN = shutil.which("rtk") or "/home/akshay-bhalerao/.local/bin/rtk"
+
+def rtk_smart_summarize(file_path: Path) -> str:
+    """Uses Rust Token Killer (RTK) binary for high-speed AST / heuristic token-compressed file summaries."""
+    if os.path.exists(RTK_BIN):
+        try:
+            r = subprocess.run([RTK_BIN, "smart", str(file_path)], capture_output=True, text=True, timeout=2)
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip()
+        except Exception:
+            pass
+    return ""
+
+def rtk_tree_structure(dir_path: Path) -> str:
+    """Uses RTK to generate a compact, token-optimized directory tree structure."""
+    if os.path.exists(RTK_BIN):
+        try:
+            r = subprocess.run([RTK_BIN, "tree", str(dir_path), "--max-depth", "3"], capture_output=True, text=True, timeout=3)
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip()
+        except Exception:
+            pass
+    return ""
 
 # Universal Multi-Format Matrix
 SUPPORTED_CODE_EXTS = {".py", ".ipynb", ".sh", ".bash", ".js", ".ts", ".c", ".cpp", ".h", ".rs", ".go", ".java", ".sql"}

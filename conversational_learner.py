@@ -221,12 +221,17 @@ class ConversationalEngine:
                 total_cnt = res.get('scanned_files', 0)
                 learned_cnt = res.get('learned_count', 0)
 
+                from local_learner import rtk_tree_structure
+                tree_viz = rtk_tree_structure(expanded)
+                tree_section = f"\n**Directory Hierarchy (via RTK):**\n```\n{tree_viz[:400]}\n```\n" if tree_viz else ""
+
                 msg = (
                     f"### Directory Analysis & Ingestion Report: `{expanded.name}`\n\n"
                     f"**Scanned `{expanded}` across {total_cnt} files:**\n"
                     f"• **Source Code**: `{code_cnt} files`\n"
                     f"• **Docs, Office & Multimodal Media**: `{media_cnt} files`\n"
                     f"• **Verified & Learned Skills**: `{learned_cnt} items`\n\n"
+                    f"{tree_section}"
                     f"**Key Indexed Modules & Assets:**\n"
                     f"{mod_sample}\n\n"
                     f"**On-Device Neural State:**\n"
