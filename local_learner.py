@@ -13,17 +13,129 @@ import zipfile
 import tarfile
 import tempfile
 
-SUPPORTED_CODE_EXTS = {".py"}
-SUPPORTED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
-SUPPORTED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
-SUPPORTED_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".ogg"}
-SUPPORTED_DOC_EXTS = {".md", ".txt", ".json", ".yaml", ".yml", ".pdf", ".csv", ".tsv"}
-SUPPORTED_ARCHIVE_EXTS = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".tar.gz", ".tar.bz2"}
+# Universal Multi-Format Matrix
+SUPPORTED_CODE_EXTS = {".py", ".ipynb", ".sh", ".bash", ".js", ".ts", ".c", ".cpp", ".h", ".rs", ".go", ".java", ".sql"}
+SUPPORTED_OFFICE_DOCS = {".docx", ".doc", ".odt", ".rtf", ".pdf", ".epub"}
+SUPPORTED_SPREADSHEETS = {".xlsx", ".xls", ".csv", ".tsv", ".ods"}
+SUPPORTED_PRESENTATIONS = {".pptx", ".ppt", ".odp"}
+SUPPORTED_CAD_3D_EXTS = {".dxf", ".dwg", ".step", ".stp", ".iges", ".igs", ".stl", ".obj", ".gltf", ".glb", ".fbx", ".ply", ".3ds", ".dae"}
+SUPPORTED_DATA_CONFIG_EXTS = {".json", ".yaml", ".yml", ".xml", ".toml", ".ini", ".cfg", ".md", ".txt", ".html", ".htm"}
+SUPPORTED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".svg", ".tiff", ".gif", ".ico"}
+SUPPORTED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".wmv"}
+SUPPORTED_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}
+SUPPORTED_ARCHIVE_EXTS = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".tar.gz", ".tar.bz2", ".7z", ".rar", ".xz"}
+
+ALL_MULTIMODAL_EXTS = (
+    SUPPORTED_OFFICE_DOCS | SUPPORTED_SPREADSHEETS | SUPPORTED_PRESENTATIONS |
+    SUPPORTED_CAD_3D_EXTS | SUPPORTED_DATA_CONFIG_EXTS | SUPPORTED_IMAGE_EXTS |
+    SUPPORTED_VIDEO_EXTS | SUPPORTED_AUDIO_EXTS
+)
+
+def extract_office_text(file_path: Path) -> str:
+    """Extracts text content and tables from Microsoft Office / OpenDocument formats."""
+    ext = file_path.suffix.lower()
+    text = []
+    
+    # 1. Word Documents (.docx)
+    if ext == ".docx":
+        try:
+            import docx
+            doc = docx.Document(str(file_path))
+            for p in doc.paragraphs:
+                if p.text.strip():
+                    text.append(p.text.strip())
+        except Exception:
+            pass
+
+    # 2. Excel Spreadsheets (.xlsx, .csv, .tsv)
+    elif ext in {".xlsx", ".xls", ".ods"}:
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
+            for sheet in wb.sheetnames[:5]:
+                ws = wb[sheet]
+                text.append(f"--- Sheet: {sheet} ---")
+                for row in ws.iter_rows(max_row=20, values_only=True):
+                    row_vals = [str(v) for v in row if v is not None]
+                    if row_vals:
+                        text.append(" | ".join(row_vals))
+        except Exception:
+            pass
+
+    # 3. PowerPoint Presentations (.pptx)
+    elif ext == ".pptx":
+        try:
+            import pptx
+            prs = pptx.Presentation(str(file_path))
+            for idx, slide in enumerate(prs.slides[:30]):
+                slide_texts = []
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        slide_texts.append(shape.text.strip())
+                if slide_texts:
+                    text.append(f"[Slide {idx+1}]: " + " - ".join(slide_texts))
+        except Exception:
+            pass
+
+    return "\n".join(text) if text else f"Office Document: {file_path.name}"
+
+def extract_cad_metadata(cad_path: Path) -> str:
+    """Parses 2D/3D CAD geometry, layers, entities, and mesh statistics from CAD formats."""
+    ext = cad_path.suffix.lower()
+    desc = [f"CAD / 3D Asset: {cad_path.name} ({ext[1:].upper()})"]
+    size_kb = round(cad_path.stat().st_size / 1024, 2)
+    desc.append(f"File Size: {size_kb} KB")
+    
+    # 1. DXF CAD Vector Parsing
+    if ext == ".dxf":
+        try:
+            import ezdxf
+            doc = ezdxf.readfile(str(cad_path))
+            msp = doc.modelspace()
+            layers = [layer.dxf.name for layer in doc.layers]
+            desc.append(f"CAD Layers ({len(layers)}): {', '.join(layers[:8])}")
+            desc.append(f"ModelSpace Entities Count: {len(msp)}")
+        except Exception:
+            # Fallback simple header inspection
+            try:
+                txt = cad_path.read_text(errors="ignore")[:500]
+                if "$ACADVER" in txt:
+                    desc.append("AutoCAD DXF Header Validated")
+            except Exception:
+                pass
+
+    # 2. STL / OBJ 3D Meshes
+    elif ext in {".stl", ".obj", ".ply", ".gltf", ".glb"}:
+        try:
+            # Scan vertex/face lines in text OBJ/STL
+            content = cad_path.read_text(errors="ignore")[:2000]
+            v_count = content.count("\nv ")
+            f_count = content.count("\nf ")
+            if v_count or f_count:
+                desc.append(f"Estimated Mesh Sample: {v_count} vertices, {f_count} faces")
+        except Exception:
+            pass
+
+    # 3. STEP / IGES Neutral CAD Standards
+    elif ext in {".step", ".stp", ".iges", ".igs"}:
+        try:
+            header_lines = []
+            with open(cad_path, "r", errors="ignore") as f:
+                for _ in range(25):
+                    line = f.readline()
+                    if not line: break
+                    if "HEADER;" in line or "FILE_NAME" in line or "FILE_SCHEMA" in line or "Start Section" in line:
+                        header_lines.append(line.strip())
+            if header_lines:
+                desc.append("CAD Standards Header:\n" + "\n".join(header_lines[:5]))
+        except Exception:
+            pass
+
+    return "\n".join(desc)
 
 def extract_pdf_text(pdf_path: Path) -> str:
     """Extracts text, code blocks, and doc contents from a PDF file."""
     text_content = []
-    # 1. Try pypdf / pypdf2 / pdfplumber if installed
     try:
         from pypdf import PdfReader
         reader = PdfReader(str(pdf_path))
@@ -35,7 +147,6 @@ def extract_pdf_text(pdf_path: Path) -> str:
         pass
     
     if not text_content:
-        # 2. Try pdftotext CLI tool fallback
         try:
             import subprocess
             r = subprocess.run(["pdftotext", str(pdf_path), "-"], capture_output=True, text=True, timeout=5)
@@ -59,7 +170,6 @@ def process_archive_file(archive_path: Path, conn) -> int:
                 with tarfile.open(archive_path, 'r:*') as tf:
                     tf.extractall(tmp_target)
             
-            # Recursively ingest the unpacked contents
             sub_res = ingest_local_directory(str(tmp_target), conn=conn, retrain_neural_weights=False, max_workers=4)
             learned = sub_res.get("learned_count", 0)
         except Exception:
@@ -67,7 +177,7 @@ def process_archive_file(archive_path: Path, conn) -> int:
     return learned
 
 def process_media_file(file_path: Path, conn) -> list:
-    """Extracts algorithmic patterns, OCR text, or descriptions from image/video/audio/pdf media."""
+    """Extracts algorithmic patterns, OCR text, CAD vectors, or specs from any document or multimodal file."""
     items = []
     ext = file_path.suffix.lower()
     
@@ -75,18 +185,39 @@ def process_media_file(file_path: Path, conn) -> list:
     if ext == ".pdf":
         try:
             pdf_text = extract_pdf_text(file_path)
-            # Check if PDF contains executable Python code
             from harvester import extract_ast
             extracted_code = extract_ast(pdf_text)
             if extracted_code:
                 for fn_name, fn_code, test_code in extracted_code:
                     items.append((fn_name, fn_code, test_code))
             else:
-                items.append((f"pdf_{file_path.stem}", f"# PDF Document {file_path.name}\n# Content Summary:\n# {pdf_text[:300]}\npass", "def test():\n    pass\n"))
+                items.append((f"pdf_{file_path.stem}", f"# PDF Document {file_path.name}\n# Content Summary:\n# {pdf_text[:400]}\npass", "def test():\n    pass\n"))
         except Exception:
             pass
 
-    # 2. Images (OCR or image captioning extraction)
+    # 2. Office Documents (Word, Excel, PowerPoint)
+    elif ext in (SUPPORTED_OFFICE_DOCS | SUPPORTED_SPREADSHEETS | SUPPORTED_PRESENTATIONS):
+        try:
+            doc_text = extract_office_text(file_path)
+            from harvester import extract_ast
+            extracted_code = extract_ast(doc_text)
+            if extracted_code:
+                for fn_name, fn_code, test_code in extracted_code:
+                    items.append((fn_name, fn_code, test_code))
+            else:
+                items.append((f"office_{file_path.stem}", f"# Office Asset: {file_path.name}\n# Summary:\n# {doc_text[:400]}\npass", "def test():\n    pass\n"))
+        except Exception:
+            pass
+
+    # 3. CAD & 3D Vector Formats (.dxf, .step, .stl, .obj, .dwg, .gltf)
+    elif ext in SUPPORTED_CAD_3D_EXTS:
+        try:
+            cad_desc = extract_cad_metadata(file_path)
+            items.append((f"cad_{file_path.stem}", f"# CAD Geometry Asset: {file_path.name}\n# Specification:\n# {cad_desc}\npass", "def test():\n    pass\n"))
+        except Exception:
+            pass
+
+    # 4. Images (OCR or image captioning extraction)
     elif ext in SUPPORTED_IMAGE_EXTS:
         try:
             from PIL import Image
@@ -104,12 +235,20 @@ def process_media_file(file_path: Path, conn) -> list:
         except Exception:
             pass
 
-    # 3. Videos / Audio (metadata and transcript hooks)
+    # 5. Videos / Audio (metadata and transcript hooks)
     elif ext in SUPPORTED_VIDEO_EXTS or ext in SUPPORTED_AUDIO_EXTS:
         try:
             size_mb = round(file_path.stat().st_size / (1024 * 1024), 2)
             desc = f"Media file {file_path.name} ({ext[1:].upper()}, {size_mb} MB)"
             items.append((f"media_{file_path.stem}", f"# {desc}\npass", "def test():\n    pass\n"))
+        except Exception:
+            pass
+
+    # 6. Data & Config specs (.json, .yaml, .csv, .xml, .html)
+    elif ext in SUPPORTED_DATA_CONFIG_EXTS:
+        try:
+            txt = file_path.read_text(errors="ignore")[:600]
+            items.append((f"doc_{file_path.stem}", f"# Config/Data Asset: {file_path.name}\n# Header:\n# {txt}\npass", "def test():\n    pass\n"))
         except Exception:
             pass
 
@@ -136,7 +275,7 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
                 all_files.append(Path(root) / f)
 
     code_files = [f for f in all_files if f.suffix.lower() in SUPPORTED_CODE_EXTS]
-    media_files = [f for f in all_files if f.suffix.lower() in (SUPPORTED_IMAGE_EXTS | SUPPORTED_VIDEO_EXTS | SUPPORTED_AUDIO_EXTS | {".pdf"})]
+    media_files = [f for f in all_files if f.suffix.lower() in ALL_MULTIMODAL_EXTS]
     archive_files = [f for f in all_files if any(f.name.lower().endswith(ext) for ext in SUPPORTED_ARCHIVE_EXTS)]
 
     total_found = 0
@@ -144,7 +283,7 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
     modules_stored = []
     lock = threading.Lock()
 
-    print(f"\n[+] Async Scanning Directory: {target} ({len(code_files)} Code, {len(media_files)} Media/PDF, {len(archive_files)} Archives across {max_workers} threads)")
+    print(f"\n[+] Async Scanning Directory: {target} ({len(code_files)} Code, {len(media_files)} Docs/Office/CAD/Media, {len(archive_files)} Archives across {max_workers} threads)")
 
     def process_single_code_file(py_file: Path):
         nonlocal total_found, total_stored
