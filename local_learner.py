@@ -252,6 +252,32 @@ def process_media_file(file_path: Path, conn) -> list:
         except Exception:
             pass
 
+    # 7. UNIVERSAL CATCH-ALL FOR ANY UNLISTED / CUSTOM / BINARY / SCIENTIFIC FILE FORMAT
+    # (e.g. .h5, .parquet, .feather, .fits, .nii, .dcm, .wasm, .dat, .bin, .log, .raw, .mat, etc.)
+    else:
+        try:
+            size_kb = round(file_path.stat().st_size / 1024, 2)
+            # Try reading as text first (for unknown text/logs/source files)
+            try:
+                sample_txt = file_path.read_text(encoding="utf-8", errors="strict")[:500].strip()
+                if sample_txt and sample_txt.isprintable():
+                    from harvester import extract_ast
+                    extracted_code = extract_ast(sample_txt)
+                    if extracted_code:
+                        for fn_name, fn_code, test_code in extracted_code:
+                            items.append((fn_name, fn_code, test_code))
+                    else:
+                        items.append((f"data_{file_path.stem}", f"# Custom Text Asset: {file_path.name}\n# Sample Content:\n# {sample_txt[:300]}\npass", "def test():\n    pass\n"))
+                else:
+                    items.append((f"blob_{file_path.stem}", f"# Binary Asset: {file_path.name} (Format: {ext or 'raw'}, Size: {size_kb} KB)\npass", "def test():\n    pass\n"))
+            except Exception:
+                # Pure binary file fallback (extract header bytes & magic metadata)
+                with open(file_path, "rb") as bf:
+                    raw_head = bf.read(64).hex()
+                items.append((f"bin_{file_path.stem}", f"# Binary Asset: {file_path.name} ({size_kb} KB)\n# Header Hex: {raw_head[:32]}\npass", "def test():\n    pass\n"))
+        except Exception:
+            pass
+
     return items
 
 def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: bool = True, max_workers: int = 8) -> dict:
@@ -271,19 +297,21 @@ def ingest_local_directory(dir_path: str, conn=None, retrain_neural_weights: boo
         # Ignore hidden / build / virtualenv directories
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in {"venv", ".venv", "__pycache__", "node_modules", "build", "dist"}]
         for f in files:
-            if not f.startswith("."):
+            # Ignore hidden files, SQLite databases, and WAL logs
+            if not f.startswith(".") and not f.endswith(".db") and not f.endswith("-wal") and not f.endswith("-shm"):
                 all_files.append(Path(root) / f)
 
     code_files = [f for f in all_files if f.suffix.lower() in SUPPORTED_CODE_EXTS]
-    media_files = [f for f in all_files if f.suffix.lower() in ALL_MULTIMODAL_EXTS]
     archive_files = [f for f in all_files if any(f.name.lower().endswith(ext) for ext in SUPPORTED_ARCHIVE_EXTS)]
+    # All remaining files (office, CAD, media, database, scientific, binary, custom) route to universal ingestion
+    media_files = [f for f in all_files if f not in code_files and f not in archive_files]
 
     total_found = 0
     total_stored = 0
     modules_stored = []
     lock = threading.Lock()
 
-    print(f"\n[+] Async Scanning Directory: {target} ({len(code_files)} Code, {len(media_files)} Docs/Office/CAD/Media, {len(archive_files)} Archives across {max_workers} threads)")
+    print(f"\n[+] Async Scanning Directory: {target} ({len(code_files)} Code, {len(media_files)} All Multi-Format Files, {len(archive_files)} Archives across {max_workers} threads)")
 
     def process_single_code_file(py_file: Path):
         nonlocal total_found, total_stored
