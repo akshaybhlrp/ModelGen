@@ -229,13 +229,23 @@
 
         .message-content {
             flex: 1;
-            font-size: 14.5px;
+            font-size: 14px;
             line-height: 1.65;
-            color: var(--text-primary);
+            color: #e3e3e3;
         }
 
-        .message-content p {
-            margin-bottom: 12px;
+        .rendered-markdown p {
+            margin: 0 0 10px 0;
+        }
+
+        .rendered-markdown strong {
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .rendered-markdown code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12.5px;
         }
 
         .message-content p:last-child {
@@ -465,7 +475,7 @@
 
                 let contentHtml = '';
                 if (data.is_conversational) {
-                    contentHtml += `<p>${escapeHtml(data.message)}</p>`;
+                    contentHtml += `<div class="rendered-markdown">${renderMarkdown(data.message)}</div>`;
                 }
                 
                 if (data.results && data.results.length > 0) {
@@ -489,6 +499,29 @@
                 responseDiv.innerHTML = `<p style="color: #f28b82;">Error communicating with ModelGen: ${err}</p>`;
             }
             container.scrollTop = container.scrollHeight;
+        }
+
+        function renderMarkdown(text) {
+            if (!text) return '';
+            let html = escapeHtml(text);
+            
+            // Bold **text**
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            // Inline code `code`
+            html = html.replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #a8c7fa;">$1</code>');
+            
+            // Numbered lists 1. 2. 3.
+            html = html.replace(/(?:^|\n)(\d+\.\s+[^\n]+)/g, '<div style="margin: 4px 0 4px 12px; line-height: 1.6;">$1</div>');
+            
+            // Bullet points • or -
+            html = html.replace(/(?:^|\n)(?:•|-|\*)\s+([^\n]+)/g, '<div style="margin: 4px 0 4px 16px; line-height: 1.6;">• $1</div>');
+            
+            // Paragraph breaks
+            html = html.replace(/\n\n+/g, '</p><p style="margin-top: 10px;">');
+            html = html.replace(/\n/g, '<br/>');
+            
+            return `<p>${html}</p>`;
         }
 
         function escapeHtml(str) {
