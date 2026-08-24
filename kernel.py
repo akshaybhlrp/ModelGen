@@ -210,17 +210,14 @@ def retrieve(conn, query: str, k: int = 10):
         for qt in q_tokens:
             if len(qt) >= 3 and any(qt in nt for nt in name_tokens):
                 subword_overlap += 1
-            if qt == "anagrams" and "anagram" in name:
-                subword_overlap += 3
-            if qt == "encoding" and "rle" in name:
-                subword_overlap += 3
-            if qt == "postfix" and "rpn" in name:
-                subword_overlap += 3
         
-        # SimHash hamming proximity (0 to 64)
-        sh = sim_dict.get(mid, 0)
-        dist = bin((q_sh ^ sh) & 0xFFFFFFFFFFFFFFFF).count('1')
-        sim_score = max(0, 64 - dist)
+        # SimHash hamming proximity (0 to 64) - only scored if fingerprint exists
+        if mid in sim_dict:
+            sh = sim_dict[mid]
+            dist = bin((q_sh ^ sh) & 0xFFFFFFFFFFFFFFFF).count('1')
+            sim_score = max(0, 64 - dist)
+        else:
+            sim_score = 0.0
         
         # Learned neural similarity component
         neural_boost = neural_scores.get(mid, 0.0)
@@ -229,8 +226,9 @@ def retrieve(conn, query: str, k: int = 10):
         total_score = (name_overlap * 20.0) + (subword_overlap * 10.0) + (code_overlap * 2.0) + (sim_score * 0.1) + neural_boost
         scored.append((mid, total_score))
         
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return [(mid, int(score)) for mid, score in scored[:k]]
+    # Sort deterministically by score descending, then module_id ascending
+    scored.sort(key=lambda x: (-x[1], x[0]))
+    return [(mid, round(score, 2)) for mid, score in scored[:k]]
 
 def update_counter(conn, ih: bytes, mid: int, success: bool):
     d = 1 if success else -1

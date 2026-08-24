@@ -177,16 +177,37 @@ class ConversationalEngine:
 
             tokens = [self.vocab[w] for w in tokens_raw]
             inp = torch.tensor([tokens], dtype=torch.long)
-            target = torch.tensor([label_id], dtype=torch.long)
+            # Replay buffer (FN-06) to prevent catastrophic forgetting of base intents
+            BASE_REPLAY_SAMPLES = [
+                (["hello", "hi", "hey"], 0),
+                (["what", "time", "clock"], 1),
+                (["calculate", "sum", "math"], 2),
+                (["quicksort", "binary", "search", "algo"], 3),
+                (["compose", "pipeline", "connect"], 4),
+                (["debug", "fix", "inspect"], 5),
+            ]
+            replay_inps = []
+            replay_targets = []
+            for words, lbl in BASE_REPLAY_SAMPLES:
+                toks = [self.vocab.get(w, self.vocab["<unk>"]) for w in words]
+                replay_inps.append(torch.tensor([toks], dtype=torch.long))
+                replay_targets.append(torch.tensor([lbl], dtype=torch.long))
 
             self.model.train()
-            optimizer = optim.Adam(self.model.parameters(), lr=0.1)
+            optimizer = optim.Adam(self.model.parameters(), lr=0.01)
             criterion = nn.CrossEntropyLoss()
             
-            # Step online gradient updates for prompt memorization
-            for _ in range(15):
+            # Step online gradient updates for prompt memorization with base rehearsal
+            for _ in range(10):
+                # Online sample step
                 out = self.model(inp)
                 loss = criterion(out, target)
+                
+                # Replay step to preserve fundamental conversational capabilities
+                for r_inp, r_tar in zip(replay_inps, replay_targets):
+                    r_out = self.model(r_inp)
+                    loss += 0.2 * criterion(r_out, r_tar)
+
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
